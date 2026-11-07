@@ -44,7 +44,8 @@ import {
   dayKey
 } from "./auth.js";
 import { config } from "./config.js";
-import { todayUTC, kvGet, kvScan, kvMGet } from "./store.js";
+import { todayUTC, kvGet, kvSet, kvSetEx, kvDel, kvScan, kvMGet } from "./store.js";
+import { sendVerificationEmail } from "./mail.js";
 import { handleMediaProxy, buildPermanentUrl, inferExt } from "./mediaProxy.js";
 
 const app = express();
@@ -210,6 +211,252 @@ app.get("/api/auth/session", async (req, res) => {
 app.post("/api/auth/logout", (req, res) => {
   clearSessionCookie(res);
   return sendSuccess(res, { logged_out: true });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const login = String(req.body?.login || req.body?.username || req.body?.email || "").trim();
+  const password = String(req.body?.password || "");
+
+  if (!login || !password) {
+    return sendError(res, "Email/Username dan password wajib diisi", 400);
+  }
+
+  // 1. Akun Master Admin: admin@kadokunn.com / arasange223
+  if (login.toLowerCase() === "admin@kadokunn.com" || login.toLowerCase() === "admin") {
+    if (password === "arasange223") {
+      let adminAcct = await getAccount("local:admin");
+      if (!adminAcct) {
+        adminAcct = {
+          id: "local:admin",
+          provider: "local",
+          name: "Kadokun (Admin)",
+          username: "admin",
+          email: "admin@kadokunn.com",
+          role: "admin",
+          dev: true,
+          createdAt: todayUTC(),
+          premium: { plan: "vip", label: "Dev & Owner (Unlimited)", unlimited: true, expires: null },
+          apiKey: null
+        };
+      }
+      adminAcct.role = "admin";
+      adminAcct.dev = true;
+      if (!adminAcct.apiKey) {
+        adminAcct.apiKey = signApiKey({ plan: "vip", name: "Administrator", a: "local:admin" });
+      }
+      await saveAccount(adminAcct);
+      setSessionCookie(res, "local:admin", isSecureReq(req));
+      return sendSuccess(res, {
+        message: "Login admin berhasil! Mode dev & unlimited aktif.",
+        account: accountView(adminAcct),
+        api_key: adminAcct.apiKey
+      });
+    } else {
+      return sendError(res, "Password admin salah!", 401);
+    }
+  }
+
+  // 2. Akun pengguna biasa
+  let accountId = await kvGet(`user:by:email:${login.toLowerCase()}`);
+  if (!accountId) {
+    accountId = await kvGet(`user:by:username:${login.toLowerCase()}`);
+  }
+
+  if (!accountId) {
+    return sendError(res, "Akun tidak ditemukan. Cek kembali username/email kamu.", 404);
+  }
+
+  const acct = await getAccount(accountId);
+  if (!acct || !acct.passwordHash || !acct.salt) {
+    return sendError(res, "Akun ini didaftarkan via OAuth atau data rusak.", 400);
+  }
+
+  const computedHash = crypto.scryptSync(password, acct.salt, 32).toString("hex");
+  if (!crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(acct.passwordHash))) {
+    return sendError(res, "Password salah!", 401);
+  }
+
+  setSessionCookie(res, acct.id, isSecureReq(req));
+  return sendSuccess(res, {
+    message: "Login berhasil!",
+    account: accountView(acct),
+    api_key: acct.apiKey
+  });
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  const confirmPassword = String(req.body?.confirmPassword || req.body?.confirm_password || "");
+  const email = String(req.body?.email || "").trim().toLowerCase();
+
+  if (!name) return sendError(res, "Nama lengkap wajib diisi", 400);
+  if (!username || !/^[a-z0-9_]{3,20}$/.test(username)) {
+    return sendError(res, "Username wajib 3-20 karakter alfanumerik / underscore", 400);
+  }
+  if (!password || password.length < 6) {
+    return sendError(res, "Password minimal 6 karakter", 400);
+  }
+  if (password !== confirmPassword) {
+    return sendError(res, "Password dan konfirmasi password tidak cocok", 400);
+  }
+
+  if (username === "admin" || (await kvGet(`user:by:username:${username}`))) {
+    return sendError(res, "Username sudah digunakan, pilih username lain", 400);
+  }
+
+  if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return sendError(res, "Format email tidak valid", 400);
+    }
+    if (email === "admin@kadokunn.com" || (await kvGet(`user:by:email:${email}`))) {
+      return sendError(res, "Email sudah terdaftar, gunakan email lain", 400);
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const salt = crypto.randomBytes(16).toString("hex");
+    const passwordHash = crypto.scryptSync(password, salt, 32).toString("hex");
+
+    await kvSetEx(
+      `reg:pending:${username}`,
+      JSON.stringify({ name, username, passwordHash, salt, email, code }),
+      600
+    );
+
+    try {
+      await sendVerificationEmail(email, code, name);
+    } catch (err) {
+      return sendError(res, `Gagal mengirim email verifikasi ke ${email}: ${err.message}`, 500);
+    }
+
+    return sendSuccess(res, {
+      need_verification: true,
+      message: `Kode verifikasi 6 digit telah dikirim ke ${email}. Silakan cek kotak masuk atau spam.`,
+      username,
+      email
+    });
+  }
+
+  // Tanpa email (email opsional)
+  const salt = crypto.randomBytes(16).toString("hex");
+  const passwordHash = crypto.scryptSync(password, salt, 32).toString("hex");
+  const id = `local:${username}`;
+
+  const acct = {
+    id,
+    provider: "local",
+    name,
+    username,
+    email: null,
+    salt,
+    passwordHash,
+    createdAt: todayUTC(),
+    role: "user",
+    dev: false,
+    premium: null,
+    apiKey: null
+  };
+  acct.apiKey = signApiKey({ plan: "user", name: acct.name, a: acct.id });
+  await saveAccount(acct);
+  await kvSet(`user:by:username:${username}`, id);
+
+  setSessionCookie(res, acct.id, isSecureReq(req));
+  return sendSuccess(res, {
+    need_verification: false,
+    message: "Akun berhasil dibuat dan otomatis login!",
+    account: accountView(acct),
+    api_key: acct.apiKey
+  });
+});
+
+app.post("/api/auth/verify-code", async (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const code = String(req.body?.code || "").trim();
+
+  if (!username || !code) {
+    return sendError(res, "Username dan kode verifikasi wajib diisi", 400);
+  }
+
+  const rawPending = await kvGet(`reg:pending:${username}`);
+  if (!rawPending) {
+    return sendError(res, "Sesi verifikasi tidak ditemukan atau sudah kedaluwarsa. Silakan daftar ulang.", 400);
+  }
+
+  let pending;
+  try {
+    pending = typeof rawPending === "string" ? JSON.parse(rawPending) : rawPending;
+  } catch {
+    return sendError(res, "Data pendaftaran rusak", 500);
+  }
+
+  if (String(pending.code).trim() !== code) {
+    return sendError(res, "Kode verifikasi 6 digit salah!", 400);
+  }
+
+  const id = `local:${pending.username}`;
+  const acct = {
+    id,
+    provider: "local",
+    name: pending.name,
+    username: pending.username,
+    email: pending.email,
+    salt: pending.salt,
+    passwordHash: pending.passwordHash,
+    createdAt: todayUTC(),
+    role: "user",
+    dev: false,
+    emailVerified: true,
+    premium: null,
+    apiKey: null
+  };
+  acct.apiKey = signApiKey({ plan: "user", name: acct.name, a: acct.id });
+  await saveAccount(acct);
+  await kvSet(`user:by:username:${pending.username}`, id);
+  if (pending.email) {
+    await kvSet(`user:by:email:${pending.email}`, id);
+  }
+  await kvDel(`reg:pending:${pending.username}`);
+
+  setSessionCookie(res, acct.id, isSecureReq(req));
+  return sendSuccess(res, {
+    verified: true,
+    message: "Verifikasi berhasil! Selamat datang di Arashi API.",
+    account: accountView(acct),
+    api_key: acct.apiKey
+  });
+});
+
+app.post("/api/auth/resend-code", async (req, res) => {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  if (!username) return sendError(res, "Username wajib diisi", 400);
+
+  const rawPending = await kvGet(`reg:pending:${username}`);
+  if (!rawPending) {
+    return sendError(res, "Sesi verifikasi tidak ditemukan atau sudah kedaluwarsa.", 400);
+  }
+
+  let pending;
+  try {
+    pending = typeof rawPending === "string" ? JSON.parse(rawPending) : rawPending;
+  } catch {
+    return sendError(res, "Data pendaftaran rusak", 500);
+  }
+
+  const newCode = String(Math.floor(100000 + Math.random() * 900000));
+  pending.code = newCode;
+
+  await kvSetEx(`reg:pending:${username}`, JSON.stringify(pending), 600);
+  try {
+    await sendVerificationEmail(pending.email, newCode, pending.name);
+  } catch (err) {
+    return sendError(res, `Gagal mengirim ulang email: ${err.message}`, 500);
+  }
+
+  return sendSuccess(res, {
+    message: `Kode verifikasi baru telah dikirimkan ke ${pending.email}`,
+    email: pending.email
+  });
 });
 
 app.get("/api/auth/telegram", async (req, res) => {

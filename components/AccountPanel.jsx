@@ -31,7 +31,25 @@ function TelegramWidget({ username }) {
   return <div ref={ref} className="tg-login-wrap" />;
 }
 
-function GuestCard({ cfg }) {
+function GuestCard({ cfg, onLoggedIn }) {
+  const { toast } = useToast();
+  const [mode, setMode] = useState("login"); // "login" | "register" | "verify"
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form states
+  const [loginInput, setLoginInput] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  const [regName, setRegName] = useState("");
+  const [regUsername, setRegUsername] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirm, setRegConfirm] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+
+  const [verifyUsername, setVerifyUsername] = useState("");
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+
   const tg = cfg?.telegram;
   const gh = cfg?.github;
   const goog = cfg?.google;
@@ -39,20 +57,306 @@ function GuestCard({ cfg }) {
   const ghReady = Boolean(gh?.enabled);
   const googReady = Boolean(goog?.enabled);
 
+  async function handleLogin(e) {
+    e.preventDefault();
+    if (!loginInput || !loginPassword) {
+      toast("Email/Username dan password wajib diisi", "err");
+      return;
+    }
+    setSubmitting(true);
+    const { ok, data } = await postJSON("/api/auth/login", {
+      login: loginInput,
+      password: loginPassword
+    });
+    setSubmitting(false);
+
+    if (ok && data?.status === true) {
+      toast(data.result?.message || "Login berhasil!", "ok");
+      if (data.result?.api_key) storage.set(APIKEY_STORAGE, data.result.api_key);
+      onLoggedIn();
+    } else {
+      toast(data?.message || "Login gagal", "err");
+    }
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    if (!regName || !regUsername || !regPassword || !regConfirm) {
+      toast("Semua kolom bertanda bintang wajib diisi", "err");
+      return;
+    }
+    if (regPassword !== regConfirm) {
+      toast("Password dan konfirmasi password tidak cocok!", "err");
+      return;
+    }
+    if (regPassword.length < 6) {
+      toast("Password minimal 6 karakter", "err");
+      return;
+    }
+
+    setSubmitting(true);
+    const { ok, data } = await postJSON("/api/auth/register", {
+      name: regName,
+      username: regUsername,
+      password: regPassword,
+      confirmPassword: regConfirm,
+      email: regEmail || undefined
+    });
+    setSubmitting(false);
+
+    if (ok && data?.status === true) {
+      if (data.result?.need_verification) {
+        toast(data.result.message, "ok");
+        setVerifyUsername(regUsername);
+        setVerifyEmail(regEmail);
+        setMode("verify");
+      } else {
+        toast("Akun berhasil dibuat dan otomatis login!", "ok");
+        if (data.result?.api_key) storage.set(APIKEY_STORAGE, data.result.api_key);
+        onLoggedIn();
+      }
+    } else {
+      toast(data?.message || "Pendaftaran gagal", "err");
+    }
+  }
+
+  async function handleVerify(e) {
+    e.preventDefault();
+    if (!verifyCode) {
+      toast("Masukkan kode 6 digit verifikasi", "err");
+      return;
+    }
+
+    setSubmitting(true);
+    const { ok, data } = await postJSON("/api/auth/verify-code", {
+      username: verifyUsername,
+      code: verifyCode
+    });
+    setSubmitting(false);
+
+    if (ok && data?.status === true) {
+      toast("Verifikasi berhasil! Selamat datang.", "ok");
+      if (data.result?.api_key) storage.set(APIKEY_STORAGE, data.result.api_key);
+      onLoggedIn();
+    } else {
+      toast(data?.message || "Kode verifikasi salah", "err");
+    }
+  }
+
+  async function handleResend() {
+    setSubmitting(true);
+    const { ok, data } = await postJSON("/api/auth/resend-code", { username: verifyUsername });
+    setSubmitting(false);
+    if (ok && data?.status === true) {
+      toast(data.result?.message || "Kode baru telah dikirim", "ok");
+    } else {
+      toast(data?.message || "Gagal mengirim ulang kode", "err");
+    }
+  }
+
   return (
-    <div className="card card-pad">
-      <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>Belum login. Masuk untuk melihat kuota token dan mengelola API key.</p>
-      <div className="stack" style={{ gap: 10 }}>
-        <a className="btn btn-block" href="/api/auth/google" aria-disabled={!googReady} tabIndex={googReady ? undefined : -1}>
-          <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan Google
-        </a>
-        <a className="btn btn-block" href="/api/auth/github" aria-disabled={!ghReady} tabIndex={ghReady ? undefined : -1}>
-          <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan GitHub
-        </a>
-        {tgReady ? <TelegramWidget username={tg.username} /> : null}
-      </div>
-      {!googReady && <p className="muted" style={{ fontSize: 12.5, margin: "12px 0 0" }}>Google OAuth butuh <code className="inline-code">GOOGLE_CLIENT_ID</code> &amp; <code className="inline-code">GOOGLE_CLIENT_SECRET</code> di environment.</p>}
-      {!ghReady && <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0" }}>GitHub OAuth butuh <code className="inline-code">GITHUB_CLIENT_ID</code> &amp; <code className="inline-code">GITHUB_CLIENT_SECRET</code>.</p>}
+    <div className="card card-pad" style={{ maxWidth: 480, margin: "0 auto" }}>
+      {mode === "login" && (
+        <>
+          <div style={{ marginBottom: 18 }}>
+            <h3 style={{ margin: "0 0 6px" }}>Masuk ke Akun</h3>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Gunakan email atau username untuk mengelola kuota token dan API key.
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="stack" style={{ gap: 12 }}>
+            <div className="field">
+              <label>Email atau Username</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="nama / admin@kadokunn.com"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Password</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="••••••••"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+              {submitting ? "Memproses..." : "Masuk"}
+            </button>
+          </form>
+
+          <div style={{ marginTop: 14, textAlign: "center", fontSize: 13 }}>
+            <span className="muted">Belum punya akun? </span>
+            <button
+              type="button"
+              className="btn btn-xs"
+              style={{ padding: "2px 8px", color: "var(--accent, #f25c05)", fontWeight: 600 }}
+              onClick={() => setMode("register")}
+            >
+              Daftar sekarang!
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 16px" }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            <span className="muted mono-sm" style={{ fontSize: 11 }}>ATAU MASUK LEWAT</span>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+
+          <div className="stack" style={{ gap: 10 }}>
+            <a className="btn btn-block" href="/api/auth/google" aria-disabled={!googReady} tabIndex={googReady ? undefined : -1}>
+              <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan Google
+            </a>
+            <a className="btn btn-block" href="/api/auth/github" aria-disabled={!ghReady} tabIndex={ghReady ? undefined : -1}>
+              <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan GitHub
+            </a>
+            {tgReady ? <TelegramWidget username={tg.username} /> : null}
+          </div>
+        </>
+      )}
+
+      {mode === "register" && (
+        <>
+          <div style={{ marginBottom: 18 }}>
+            <h3 style={{ margin: "0 0 6px" }}>Daftar Akun Baru</h3>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Buat akun developer Arashi API. Email bersifat opsional.
+            </p>
+          </div>
+
+          <form onSubmit={handleRegister} className="stack" style={{ gap: 12 }}>
+            <div className="field">
+              <label>Nama Lengkap *</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="Nama kamu"
+                value={regName}
+                onChange={(e) => setRegName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Username *</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="username (huruf, angka, underscore)"
+                value={regUsername}
+                onChange={(e) => setRegUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Password *</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="Minimal 6 karakter"
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Konfirmasi Password *</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="Ketik ulang password"
+                value={regConfirm}
+                onChange={(e) => setRegConfirm(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>
+                Email <span className="muted" style={{ fontSize: 11 }}>(Opsional - untuk verifikasi 6 digit via noreply@kadokunn.com)</span>
+              </label>
+              <input
+                className="input"
+                type="email"
+                placeholder="nama@email.com (bisa dikosongkan)"
+                value={regEmail}
+                onChange={(e) => setRegEmail(e.target.value)}
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+              {submitting ? "Mendaftarkan..." : "Daftar Akun"}
+            </button>
+          </form>
+
+          <div style={{ marginTop: 14, textAlign: "center", fontSize: 13 }}>
+            <span className="muted">Sudah punya akun? </span>
+            <button
+              type="button"
+              className="btn btn-xs"
+              style={{ padding: "2px 8px", color: "var(--accent, #f25c05)", fontWeight: 600 }}
+              onClick={() => setMode("login")}
+            >
+              Masuk sekarang
+            </button>
+          </div>
+        </>
+      )}
+
+      {mode === "verify" && (
+        <>
+          <div style={{ marginBottom: 18, textAlign: "center" }}>
+            <span style={{ fontSize: 32 }}>📧</span>
+            <h3 style={{ margin: "8px 0 6px" }}>Verifikasi Email</h3>
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Kode 6 digit telah dikirimkan dari <code className="inline-code">noreply@kadokunn.com</code> ke <b>{verifyEmail}</b>.
+            </p>
+          </div>
+
+          <form onSubmit={handleVerify} className="stack" style={{ gap: 12 }}>
+            <div className="field">
+              <label style={{ textAlign: "center", display: "block" }}>Masukkan Kode 6 Digit</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="123456"
+                maxLength={6}
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value)}
+                style={{ textAlign: "center", letterSpacing: 8, fontSize: 24, fontWeight: 700 }}
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+              {submitting ? "Memverifikasi..." : "Verifikasi & Masuk"}
+            </button>
+          </form>
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 12 }}>
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={handleResend}
+              disabled={submitting}
+            >
+              Kirim ulang kode
+            </button>
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => setMode("register")}
+            >
+              Kembali ke pendaftaran
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -88,14 +392,17 @@ function ProfileCard({ result, onChanged }) {
         {a.photo ? <img className="avatar" src={a.photo} alt="" referrerPolicy="no-referrer" /> : <span className="avatar-fallback">{(a.name || "?")[0].toUpperCase()}</span>}
         <div className="profile-info">
           <div className="profile-name">{a.name || "Tanpa nama"}</div>
-          <div className="muted mono-sm">{a.provider || ""}{a.username ? ` · @${a.username}` : ""}{a.owner ? " · owner" : ""}</div>
+          <div className="muted mono-sm">{a.provider || ""}{a.username ? ` · @${a.username}` : ""}{a.owner ? " · Owner / Dev" : a.dev ? " · Dev" : ""}</div>
         </div>
-        <span className="pill">{a.premium ? a.premium.label : "Free"}</span>
+        <span className="pill" style={a.owner || a.dev ? { background: "var(--accent, #f25c05)", color: "#fff", fontWeight: 700 } : undefined}>
+          {a.owner || a.dev ? "Dev & Owner (Unlimited)" : (a.premium ? a.premium.label : "Free")}
+        </span>
       </div>
 
-      <div className="kv"><span className="k">Kuota harian</span><span className="mono-sm">{String(q.daily_limit)}</span></div>
+      <div className="kv"><span className="k">Kuota token harian</span><span className="mono-sm">{String(q.daily_limit)}</span></div>
       <div className="kv"><span className="k">Terpakai hari ini</span><span className="mono-sm">{String(q.used_today)}</span></div>
-      <div className="kv"><span className="k">Sisa hari ini</span><span className="mono-sm">{String(q.remaining_today)}</span></div>
+      <div className="kv"><span className="k">Sisa token hari ini</span><span className="mono-sm">{String(q.remaining_today)}</span></div>
+      {a.email && <div className="kv"><span className="k">Email terdaftar</span><span className="mono-sm">{a.email}</span></div>}
       {a.premium?.expires && <div className="kv"><span className="k">Premium berakhir</span><span className="mono-sm">{a.premium.expires}</span></div>}
 
       <div style={{ marginTop: 16 }}>
@@ -133,5 +440,5 @@ export default function AccountPanel() {
   }, [toast]);
 
   if (state.loading) return <p className="muted" style={{ fontSize: 14 }}>Memuat...</p>;
-  return state.session ? <ProfileCard result={state.session} onChanged={load} /> : <GuestCard cfg={state.cfg} />;
+  return state.session ? <ProfileCard result={state.session} onChanged={load} /> : <GuestCard cfg={state.cfg} onLoggedIn={load} />;
 }

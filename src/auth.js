@@ -126,6 +126,8 @@ export const rotateAccountKey = async (acct) => {
 // ---------------- owner & premium & quota ----------------
 
 export const isOwnerId = (id) =>
+  id === "local:admin" ||
+  id === "admin@kadokunn.com" ||
   (process.env.KAELYN_OWNER_IDS || "")
     .split(",")
     .map((s) => s.trim())
@@ -133,7 +135,9 @@ export const isOwnerId = (id) =>
     .includes(id);
 
 export const isPremiumActive = (acct) => {
-  if (!acct?.premium) return false;
+  if (!acct) return false;
+  if (isOwnerId(acct.id) || acct.role === "admin" || acct.dev) return true;
+  if (!acct.premium) return false;
   if (acct.premium.unlimited) return true;
   if (!acct.premium.expires) return true;
   const time = Date.parse(acct.premium.expires);
@@ -142,10 +146,10 @@ export const isPremiumActive = (acct) => {
   return Date.now() < end;
 };
 
-// 0 = unlimited. Owner > VIP (0) > Premium (500) > user free (100).
+// 0 = unlimited. Owner / Admin / Dev (0) > VIP (0) > Premium (500) > user free (100).
 export const getAccountLimit = (acct) => {
   if (!acct) return 100;
-  if (isOwnerId(acct.id)) return 0;
+  if (isOwnerId(acct.id) || acct.role === "admin" || acct.dev || acct.role === "dev") return 0;
   if (isPremiumActive(acct)) {
     const p = config.plans[acct.premium.plan] || config.plans.premium;
     if (p.unlimited || p.dailyLimit === 0) return 0;
@@ -154,24 +158,37 @@ export const getAccountLimit = (acct) => {
   return 100;
 };
 
-export const accountView = (acct) => ({
-  id: acct.id,
-  provider: acct.provider,
-  name: acct.name,
-  username: acct.username || null,
-  photo: acct.photo || null,
-  email: acct.email || null,
-  createdAt: acct.createdAt,
-  owner: isOwnerId(acct.id),
-  premium: isPremiumActive(acct)
-    ? {
-        plan: acct.premium.plan,
-        label: acct.premium.label || acct.premium.plan,
-        unlimited: !!acct.premium.unlimited,
-        expires: acct.premium.expires || null
-      }
-    : null
-});
+export const accountView = (acct) => {
+  const isOwner = isOwnerId(acct.id) || acct.role === "admin";
+  const isDev = Boolean(acct.dev || isOwner || acct.role === "dev");
+  return {
+    id: acct.id,
+    provider: acct.provider,
+    name: acct.name,
+    username: acct.username || null,
+    photo: acct.photo || null,
+    email: acct.email || null,
+    createdAt: acct.createdAt,
+    owner: isOwner,
+    role: isOwner ? "admin" : (acct.role || "user"),
+    dev: isDev,
+    premium: isOwner
+      ? {
+          plan: "vip",
+          label: "Dev & Owner (Unlimited)",
+          unlimited: true,
+          expires: null
+        }
+      : (isPremiumActive(acct)
+        ? {
+            plan: acct.premium.plan,
+            label: acct.premium.label || acct.premium.plan,
+            unlimited: !!acct.premium.unlimited,
+            expires: acct.premium.expires || null
+          }
+        : null)
+  };
+};
 
 // ---------------- Telegram Login Widget ----------------
 
