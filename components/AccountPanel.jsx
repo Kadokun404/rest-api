@@ -131,57 +131,9 @@ function GuestCard({ cfg, onLoggedIn }) {
   }
 
   return (
-    <div className="account-desktop-grid">
-      {/* SISI KIRI (DESKTOP): DEVELOPER PORTAL PERKS & HERO */}
-      <div className="account-hero-side">
-        <div className="account-hero-badge">
-          <span className="pixel-square" />
-          ARASHI DEVELOPER PORTAL
-        </div>
-        <h1 className="account-hero-title">
-          Satu Akun, Akses Penuh <br />
-          <span className="mistral-flame-text">54+ Endpoint REST API.</span>
-        </h1>
-        <p className="account-hero-desc">
-          Dapatkan kuota token harian gratis, kelola API key kustom, dan integrasikan downloader, search, anime, hingga AI tools ke aplikasi kamu dalam hitungan menit.
-        </p>
-
-        <div className="account-perks-list">
-          <div className="account-perk-item">
-            <div className="perk-icon">⚡</div>
-            <div>
-              <h4>Kuota Token Harian Otomatis</h4>
-              <p>Reset otomatis setiap 00:00 UTC. Cukup daftar atau login untuk mulai memakai.</p>
-            </div>
-          </div>
-          <div className="account-perk-item">
-            <div className="perk-icon">🚀</div>
-            <div>
-              <h4>54+ Layanan Siap Pakai</h4>
-              <p>TikTok no-watermark, Spotify download, Donghua streamer, Google Image HD, dan Gemini AI.</p>
-            </div>
-          </div>
-          <div className="account-perk-item">
-            <div className="perk-icon">🔑</div>
-            <div>
-              <h4>API Key & Keamanan Maksimal</h4>
-              <p>Dukungan autentikasi fleksibel melalui header x-api-key maupun query URL.</p>
-            </div>
-          </div>
-          <div className="account-perk-item">
-            <div className="perk-icon">💌</div>
-            <div>
-              <h4>Official Support</h4>
-              <p>Dukungan teknis responsif langsung via email support di admin@kadokunn.com.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* SISI KANAN: FORM LOGIN & REGISTER CARD */}
-      <div className="account-form-side">
-        <div className="card card-pad auth-card-box">
-          {mode === "login" && (
+    <div className="account-center-wrap">
+      <div className="card card-pad auth-center-card">
+        {mode === "login" && (
             <>
               <div style={{ marginBottom: 18 }}>
                 <h3 style={{ margin: "0 0 6px" }}>Masuk ke Akun</h3>
@@ -383,9 +335,8 @@ function GuestCard({ cfg, onLoggedIn }) {
           )}
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 function ProfileCard({ result, onChanged }) {
   const { toast } = useToast();

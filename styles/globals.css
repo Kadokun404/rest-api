@@ -1146,115 +1146,44 @@ html:not(.dark) .stat-progress-track {
 }
 
 /* ==========================================================================
-   Account Page Desktop 2-Column Grid & Profile Dashboard
+   Account Page Centered Card (Large & Balanced)
    ========================================================================== */
-.account-desktop-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 48px;
-  align-items: center;
-  max-width: 1080px;
-  margin: 32px auto 60px;
+.account-center-wrap {
+  position: relative;
+  max-width: 580px;
+  margin: 48px auto 90px;
   width: 100%;
 }
-@media (max-width: 960px) {
-  .account-desktop-grid {
-    grid-template-columns: 1fr;
-    gap: 32px;
-    margin: 16px auto 40px;
+.account-center-wrap::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 640px;
+  max-width: 95vw;
+  height: 460px;
+  background: radial-gradient(circle, rgba(242, 92, 5, 0.14) 0%, rgba(99, 102, 241, 0.08) 50%, transparent 72%);
+  pointer-events: none;
+  filter: blur(52px);
+  z-index: -1;
+}
+.auth-center-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 38px 38px 34px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  text-align: left;
+}
+@media (max-width: 640px) {
+  .account-center-wrap {
+    margin: 20px auto 40px;
   }
-}
-
-.account-hero-side {
-  display: flex;
-  flex-direction: column;
-}
-.account-hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 16px;
-  width: fit-content;
-}
-.account-hero-title {
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  margin: 0 0 14px;
-  color: var(--text);
-}
-.account-hero-desc {
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--muted);
-  margin-bottom: 24px;
-  max-width: 520px;
-}
-
-.account-perks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.account-perk-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: all 150ms ease;
-}
-.account-perk-item:hover {
-  border-color: var(--border-strong);
-  transform: translateX(3px);
-}
-.perk-icon {
-  font-size: 18px;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-}
-.account-perk-item h4 {
-  margin: 0 0 2px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.account-perk-item p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.account-form-side {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-.auth-card-box {
-  width: 100%;
-  max-width: 460px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  .auth-center-card {
+    padding: 24px 20px;
+  }
 }
 
 .account-profile-container {
