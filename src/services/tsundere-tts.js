@@ -374,6 +374,80 @@ export async function generateAnimeVoice(text, model = "anime-girl-tsundere", ou
     return await mergeBuffersToOpusVn(audioBuffers, dest)
 }
 
+/**
+ * Konversi buffer MP3 Google ke WhatsApp Voice Note (.opus) natural tanpa filter anime
+ */
+async function mergeGoogleBuffersToOpusVn(mp3Buffers, destPath) {
+    await fs.mkdir(path.dirname(destPath), { recursive: true })
+
+    if (mp3Buffers.length === 1) {
+        return await new Promise((resolve, reject) => {
+            const p = spawn("ffmpeg", [
+                "-y", "-hide_banner", "-loglevel", "error",
+                "-i", "pipe:0",
+                "-vn", "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", destPath
+            ])
+            p.stdin.on("error", () => {})
+            p.on("error", reject)
+            p.on("close", code => code === 0 ? resolve(destPath) : reject(new Error(`ffmpeg exit ${code}`)))
+            p.stdin.end(mp3Buffers[0])
+        })
+    }
+
+    const tmpDir = path.join(path.dirname(destPath), `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
+    await fs.mkdir(tmpDir, { recursive: true })
+    const fileListPath = path.join(tmpDir, "files.txt")
+    let fileListContent = ""
+
+    for (let i = 0; i < mp3Buffers.length; i++) {
+        const chunkPath = path.join(tmpDir, `chunk-${i}.mp3`)
+        await fs.writeFile(chunkPath, mp3Buffers[i])
+        fileListContent += `file '${chunkPath}'\n`
+    }
+    await fs.writeFile(fileListPath, fileListContent)
+
+    return await new Promise((resolve, reject) => {
+        const p = spawn("ffmpeg", [
+            "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "concat", "-safe", "0", "-i", fileListPath,
+            "-vn", "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", destPath
+        ])
+        p.on("error", reject)
+        p.on("close", async code => {
+            try { await fs.rm(tmpDir, { recursive: true, force: true }) } catch {}
+            code === 0 ? resolve(destPath) : reject(new Error(`ffmpeg concat exit ${code}`))
+        })
+    })
+}
+
+/**
+ * Generate Google Voice Note (.gvn) Mbak Google asli tanpa batas karakter
+ */
+export async function generateGoogleVoice(text, lang = "id", outPath = null) {
+    const clean = cleanTextForTts(text)
+    if (!clean) throw new Error("Teks untuk suara kosong")
+
+    const chunks = splitTextIntoChunks(clean, 180)
+    if (!chunks.length) throw new Error("Teks tidak dapat diproses")
+
+    const dest = outPath || path.join(process.cwd(), "temp", "ara-vn", `gvn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.opus`)
+
+    const audioBuffers = []
+    for (const chunk of chunks) {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(chunk)}`
+        const res = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+            },
+            signal: AbortSignal.timeout(10000)
+        })
+        if (!res.ok) throw new Error(`Google TTS HTTP ${res.status}`)
+        audioBuffers.push(Buffer.from(await res.arrayBuffer()))
+    }
+
+    return await mergeGoogleBuffersToOpusVn(audioBuffers, dest)
+}
+
 export const generateTsundereVoice = (text, outPath) => generateAnimeVoice(text, "anime-girl-tsundere", outPath)
 export const generateShyVoice = (text, outPath) => generateAnimeVoice(text, "anime-girl-shy", outPath)
 
@@ -383,5 +457,6 @@ export default {
     refreshAnyToSpeechSession,
     generateAnimeVoice,
     generateTsundereVoice,
-    generateShyVoice
+    generateShyVoice,
+    generateGoogleVoice
 }

@@ -45,6 +45,7 @@ export const pluginManifest = [
   { category: "search", name: "ytsearch", routePath: "/search/ytsearch", load: () => import("./plugins/search/ytsearch.js") },
   { category: "tools", name: "codeku", routePath: "/tools/codeku", load: () => import("./plugins/tools/codeku.js") },
   { category: "tools", name: "emailnator", routePath: "/tools/emailnator", load: () => import("./plugins/tools/emailnator.js") },
+  { category: "tools", name: "google-tts", routePath: "/tools/google-tts", load: () => import("./plugins/tools/google-tts.js") },
   { category: "tools", name: "hd", routePath: "/tools/hd", load: () => import("./plugins/tools/hd.js") },
   { category: "tools", name: "image-enlarger", routePath: "/tools/image-enlarger", load: () => import("./plugins/tools/image-enlarger.js") },
   { category: "tools", name: "ruangemail", routePath: "/tools/ruangemail", load: () => import("./plugins/tools/ruangemail.js") },
