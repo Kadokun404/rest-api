@@ -58,15 +58,17 @@ export default function Header() {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
     storage.set(THEME_STORAGE, dark ? "dark" : "light");
-    document.querySelector('meta[name="theme-color"]:not([media])')?.setAttribute("content", dark ? "#0b0b0c" : "#faf8f3");
+    document.querySelector('meta[name="theme-color"]:not([media])')?.setAttribute("content", dark ? "#0c0c0d" : "#faf8f5");
   }
 
   return (
     <header className="site-header">
       <div className="container nav-inner">
-        <Link href="/" className="brand" aria-label="Kaelyn Api's - Beranda">
-          <span className="brand-logo"><LogoMark /></span>
-          <span className="brand-name">Kaelyn Api&apos;s</span>
+        <Link href="/" className="brand" aria-label="Arashi Api's - Beranda">
+          <span className="brand-logo" style={{ overflow: "hidden", background: "transparent" }}>
+            <img src="/favicon1.png" alt="Arashi" width={24} height={24} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          </span>
+          <span className="brand-name">Arashi Api&apos;s</span>
         </Link>
 
         <nav className="nav-links" aria-label="Navigasi utama">
