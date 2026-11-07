@@ -10,13 +10,7 @@ export const metadata = {
 export default function AccountPage() {
   return (
     <div className="container fade-in">
-      <div className="page-head">
-        <h1>Akun</h1>
-        <p>Masuk untuk melihat kuota, mengelola API key, dan menyinkronkan pembelian premium.</p>
-      </div>
-      <section className="section section-last" style={{ maxWidth: 560 }}>
-        <AccountPanel />
-      </section>
+      <AccountPanel />
     </div>
   );
 }
