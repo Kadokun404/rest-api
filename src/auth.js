@@ -142,17 +142,16 @@ export const isPremiumActive = (acct) => {
   return Date.now() < end;
 };
 
-// 0 = unlimited. Owner > premium paket > user baru (100) > 50/hari.
+// 0 = unlimited. Owner > VIP (0) > Premium (500) > user free (100).
 export const getAccountLimit = (acct) => {
-  if (!acct) return 50;
+  if (!acct) return 100;
   if (isOwnerId(acct.id)) return 0;
   if (isPremiumActive(acct)) {
-    const p = config.plans[acct.premium.plan] || config.plans.free;
-    if (p.unlimited) return 0;
-    return Number(p.dailyLimit) || 0;
+    const p = config.plans[acct.premium.plan] || config.plans.premium;
+    if (p.unlimited || p.dailyLimit === 0) return 0;
+    return Number(p.dailyLimit) || 500;
   }
-  if (acct.createdAt === todayUTC()) return 100;
-  return 50;
+  return 100;
 };
 
 export const accountView = (acct) => ({
@@ -273,6 +272,67 @@ export const githubExchange = async (origin, code) => {
   };
 };
 
+// ---------------- Google OAuth ----------------
+
+export const googleEnabled = () => Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+const googleCallbackUrl = (origin) =>
+  process.env.GOOGLE_CALLBACK_URL || `${origin.replace(/\/+$/, "")}/api/auth/google/callback`;
+
+export const googleLoginUrl = (origin, state) => {
+  if (!googleEnabled()) return null;
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    redirect_uri: googleCallbackUrl(origin),
+    response_type: "code",
+    scope: "openid email profile",
+    state,
+    access_type: "online",
+    prompt: "select_account"
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+};
+
+export const googleExchange = async (origin, code) => {
+  if (!googleEnabled()) {
+    return { error: "Google login belum dikonfigurasi" };
+  }
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: googleCallbackUrl(origin),
+      grant_type: "authorization_code"
+    })
+  });
+
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) {
+    return { error: tokenData.error_description || tokenData.error || "Google OAuth token exchange gagal" };
+  }
+
+  const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" }
+  });
+  const me = await userRes.json();
+  if (!me.sub) {
+    return { error: "Gagal mengambil profil user Google" };
+  }
+
+  const username = me.email ? me.email.split("@")[0] : me.sub;
+  return {
+    id: `goog:${me.sub}`,
+    provider: "google",
+    name: me.name || username,
+    username,
+    photo: me.picture || null,
+    email: me.email || null
+  };
+};
+
 // ---------------- helpers dipakai app.js ----------------
 
 export const authConfig = () => ({
@@ -282,6 +342,9 @@ export const authConfig = () => ({
   },
   github: {
     enabled: githubEnabled()
+  },
+  google: {
+    enabled: googleEnabled()
   }
 });
 

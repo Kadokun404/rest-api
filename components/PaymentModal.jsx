@@ -51,7 +51,7 @@ export default function PaymentModal({ cfg, onClose }) {
   useEffect(() => {
     stopped.current = false;
     (async () => {
-      const res = cfg.kind === "buy" ? await postJSON("/api/buy", { plan: cfg.plan }) : await postJSON("/api/donate", { amount: cfg.amount });
+      const res = cfg.kind === "buy" ? await postJSON("/api/buy", { plan: cfg.plan, days: cfg.days }) : await postJSON("/api/donate", { amount: cfg.amount });
       if (stopped.current) return;
       if (!res.ok || res.data?.status !== true || !res.data?.result) {
         setError(res.data?.message || "Gagal membuat QRIS");
@@ -82,7 +82,7 @@ export default function PaymentModal({ cfg, onClose }) {
     const check = async () => {
       if (stopped.current) return;
       attempts.current += 1;
-      const base = pay.kind === "buy" ? `/api/buy/status?plan=${encodeURIComponent(pay.plan)}&` : "/api/donate/status?";
+      const base = pay.kind === "buy" ? `/api/buy/status?plan=${encodeURIComponent(pay.plan)}&days=${encodeURIComponent(pay.days || 7)}&` : "/api/donate/status?";
       const url = `${base}ref=${encodeURIComponent(pay.ref)}&amount=${encodeURIComponent(pay.amount)}${pay.created_at ? "&created_at=" + encodeURIComponent(pay.created_at) : ""}`;
       const { ok, data } = await getJSON(url);
       if (stopped.current) return;

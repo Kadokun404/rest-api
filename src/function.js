@@ -3,7 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import { config, localKeys } from "./config.js";
-import { kvGet, kvIncr, kvPipeline } from "./store.js";
+import { kvGet, kvIncr, kvIncrBy, kvPipeline } from "./store.js";
 import { getAccount, isOwnerId, isPremiumActive, getAccountLimit } from "./auth.js";
 
 const CREATOR = "Kadokun";
@@ -127,7 +127,7 @@ const secondsUntilReset = () => {
 };
 
 const getUsed = async (id) => Number((await kvGet(quotaKey(id))) || 0);
-const incrUsage = (id) => kvIncr(quotaKey(id));
+const incrUsage = (id, amount = 10) => kvIncrBy(quotaKey(id), amount);
 
 // Catat 1 hit untuk analitik harian (total + per-endpoint). Non-blocking.
 export const recordHit = async (routePath) => {
@@ -275,32 +275,39 @@ export const describeApiKey = async (resolved) => {
   };
 };
 
-const applyRateHeaders = (res, limit, used) => {
+const applyRateHeaders = (res, limit, used, cost = 10) => {
   if (limit > 0) {
     res.setHeader("X-RateLimit-Limit", String(limit));
     res.setHeader("X-RateLimit-Remaining", String(Math.max(0, limit - used)));
+    res.setHeader("X-RateLimit-Cost", String(cost));
     res.setHeader("X-RateLimit-Reset", String(secondsUntilReset()));
   }
 };
 
-const consumeQuota = async (res, quotaId, limit) => {
+const consumeQuota = async (res, quotaId, limit, cost = config.tokenCostPerCall || 10) => {
+  if (limit === 0) {
+    // 0 = unlimited request & token (VIP & Owner)
+    return true;
+  }
+
   const used = await getUsed(quotaId);
 
-  if (limit > 0 && used >= limit) {
-    applyRateHeaders(res, limit, used);
+  if (limit > 0 && used + cost > limit) {
+    applyRateHeaders(res, limit, used, cost);
     res.setHeader("Retry-After", String(secondsUntilReset()));
-    sendError(res, "Batas request harian sudah habis. Reset setiap 00:00 UTC", 429);
+    sendError(res, `Batas token harian sudah habis (sisa: ${Math.max(0, limit - used)} token, butuh: ${cost} token). Reset setiap 00:00 UTC`, 429);
     return false;
   }
 
-  const next = await incrUsage(quotaId);
-  applyRateHeaders(res, limit, next);
+  const next = await incrUsage(quotaId, cost);
+  applyRateHeaders(res, limit, next, cost);
   return true;
 };
 
 // Dipanggil sebelum plugin dijalankan. Return true kalau boleh lanjut, false kalau response error sudah dikirim.
 export const authorizeRequest = async (req, res, target) => {
   const needsPremium = target?.premium === true;
+  const tokenCost = target?.tokenCost ?? config.tokenCostPerCall ?? 10;
   const resolved = resolveApiKey(req);
 
   if (resolved.error) {
@@ -318,11 +325,8 @@ export const authorizeRequest = async (req, res, target) => {
       return false;
     }
 
-    const anonLimit = Number(config.anonymousDailyLimit) || 0;
-    if (anonLimit > 0) {
-      return consumeQuota(res, `ip:${getClientIp(req)}`, anonLimit);
-    }
-    return true;
+    const anonLimit = Number(config.anonymousDailyLimit) || 100;
+    return consumeQuota(res, `ip:${getClientIp(req)}`, anonLimit, tokenCost);
   }
 
   const { entry, id } = resolved;
@@ -353,7 +357,7 @@ export const authorizeRequest = async (req, res, target) => {
 
   const quotaId = account ? `acct:${account.id}` : id;
   const limit = account ? getAccountLimit(account) : getLimit(entry);
-  return consumeQuota(res, quotaId, limit);
+  return consumeQuota(res, quotaId, limit, tokenCost);
 };
 
 export const safeFetch = async (url, options = {}, timeoutMs = 20000) => {

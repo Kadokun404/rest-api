@@ -10,37 +10,58 @@
 // Buat key baru dengan:  npm run genkey -- premium "Nama Pemilik"
 
 export const config = {
-  siteName: "Kaelyn Api's",
+  siteName: "Arashi Api's",
   creator: "Kadokun",
-  baseUrl: "https://api.kadokunn.com",
+  baseUrl: "https://kadokunn.com",
 
   // Nama header yang dibaca untuk API key (query ?apikey= dan Authorization: Bearer juga didukung)
   keyHeader: "x-api-key",
 
   // Gateway QRIS (plugin di src/plugins/qris). Token diambil dari env QRIS_INTERNAL_TOKEN.
-  // Untuk repo private, token boleh diisi di sini, tapi env tetap lebih aman.
   qrisBaseUrl: "https://qris.kadokunn.com",
   qrisInternalToken: "",
 
-  // Batas request per hari untuk pengguna tanpa API key (per IP). 0 = tanpa batas.
-  anonymousDailyLimit: 0,
+  // Batas token per hari untuk anonim (per IP) & free user. 100 token / hari.
+  anonymousDailyLimit: 100,
 
-  // Definisi plan. dailyLimit = jumlah request per hari (reset 00:00 UTC). 0 = tanpa batas.
-  // Plan yang bisa dibeli punya: price (rupiah), durationDays (null = selamanya), label.
+  // Biaya token per pemanggilan fitur gratis (10 token per request)
+  tokenCostPerCall: 10,
+
+  // Definisi plan:
+  // - Free: 100 token / hari (10 request gratis)
+  // - Premium: 500 token / hari (50 request), Rp 500 / hari, default 7 hari = Rp 3.500
+  // - VIP: Unlimited token & request, Rp 950 / hari, default 7 hari = Rp 6.650
   plans: {
-    free: { dailyLimit: 500, premium: false },
-    premium: { dailyLimit: 10000, premium: true },
-
-    // Paket berbayar (dibeli lewat /api/buy + QRIS GoPay)
-    weekly: { dailyLimit: 1000, premium: true, price: 5000, durationDays: 7, label: "Weekly", tagline: "7 hari akses premium" },
-    biweekly: { dailyLimit: 2000, premium: true, price: 10000, durationDays: 14, label: "2 Weeks", tagline: "14 hari akses premium" },
-    monthly: { dailyLimit: 5000, premium: true, price: 20000, durationDays: 30, label: "1 Month", tagline: "30 hari akses premium" },
-    quarterly: { dailyLimit: 10000, premium: true, price: 40000, durationDays: 90, label: "3 Months", tagline: "90 hari akses premium" },
-    vvip: { dailyLimit: 0, premium: true, price: 50000, durationDays: null, label: "VVIP", tagline: "Unlimited request, selamanya", unlimited: true, featured: true }
+    free: {
+      dailyLimit: 100,
+      premium: false,
+      label: "Free",
+      tagline: "100 token / hari (10 request)"
+    },
+    premium: {
+      dailyLimit: 500,
+      premium: true,
+      dailyRate: 500,
+      durationDays: 7,
+      price: 3500,
+      label: "Premium",
+      tagline: "500 token / hari (50 request) · Rp 500/hari"
+    },
+    vip: {
+      dailyLimit: 0,
+      premium: true,
+      unlimited: true,
+      dailyRate: 950,
+      durationDays: 7,
+      price: 6650,
+      label: "VIP",
+      tagline: "Unlimited token & request tanpa batas · Rp 950/hari",
+      featured: true
+    }
   },
 
   // Urutan paket yang ditampilkan di halaman beli
-  planOrder: ["weekly", "biweekly", "monthly", "quarterly", "vvip"]
+  planOrder: ["premium", "vip"]
 };
 
 // Contoh entri:

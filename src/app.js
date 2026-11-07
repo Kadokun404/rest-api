@@ -38,6 +38,9 @@ import {
   githubEnabled,
   githubLoginUrl,
   githubExchange,
+  googleEnabled,
+  googleLoginUrl,
+  googleExchange,
   dayKey
 } from "./auth.js";
 import { config } from "./config.js";
@@ -258,6 +261,44 @@ app.get("/api/auth/github/callback", async (req, res) => {
   }
 });
 
+app.get("/api/auth/google", (req, res) => {
+  const origin = requestOrigin(req);
+  if (!googleEnabled()) {
+    return res.redirect(`${origin}/account?error=${encodeURIComponent("Login Google belum dikonfigurasi server (butuh GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET)")}`);
+  }
+  const state = crypto.randomBytes(16).toString("base64url");
+  const secure = isSecureReq(req);
+  res.setHeader("Set-Cookie", [
+    `kae_goog_state=${state}; Path=/; Max-Age=600; SameSite=Lax; HttpOnly${secure ? "; Secure" : ""}`
+  ]);
+  return res.redirect(googleLoginUrl(origin, state));
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  const origin = requestOrigin(req);
+  const { code, state } = req.query || {};
+  const cookies = parseCookies(req);
+  if (!code || !state || state !== cookies.kae_goog_state) {
+    return res.redirect(`${origin}/account?error=${encodeURIComponent("Sesi login Google tidak valid atau kedaluwarsa")}`);
+  }
+
+  try {
+    const profile = await googleExchange(origin, String(code));
+    if (profile.error) {
+      return res.redirect(`${origin}/account?error=${encodeURIComponent(profile.error)}`);
+    }
+    const acct = await upsertAccount(profile);
+    const secure = isSecureReq(req);
+    res.setHeader("Set-Cookie", [
+      sessionCookie(acct.id, secure),
+      "kae_goog_state=; Path=/; Max-Age=0; HttpOnly"
+    ]);
+    return res.redirect(`${origin}/account?welcome=goog`);
+  } catch (err) {
+    return res.redirect(`${origin}/account?error=${encodeURIComponent(err.message || "Login Google gagal")}`);
+  }
+});
+
 app.post("/api/auth/profile", async (req, res) => {
   const acct = await currentAccount(req);
   if (!acct) {
@@ -405,15 +446,19 @@ const detectPaid = (data) => {
 
 const planCatalog = () =>
   (config.planOrder || Object.keys(config.plans))
-    .filter((id) => config.plans[id] && typeof config.plans[id].price === "number")
+    .filter((id) => config.plans[id] && (typeof config.plans[id].price === "number" || typeof config.plans[id].dailyRate === "number"))
     .map((id) => {
       const plan = config.plans[id];
+      const dailyRate = plan.dailyRate || Math.round(plan.price / (plan.durationDays || 7)) || 500;
+      const durationDays = plan.durationDays ?? 7;
+      const price = plan.price || (dailyRate * durationDays);
       return {
         id,
         label: plan.label || id,
         tagline: plan.tagline || "",
-        price: plan.price,
-        durationDays: plan.durationDays ?? null,
+        dailyRate,
+        price,
+        durationDays,
         unlimited: plan.unlimited === true,
         dailyLimit: plan.dailyLimit,
         featured: plan.featured === true
@@ -425,17 +470,22 @@ app.get("/api/plans", (req, res) => {
 });
 
 app.post("/api/buy", async (req, res) => {
-  const planId = String(req.body?.plan || req.query?.plan || "");
+  const planId = String(req.body?.plan || req.query?.plan || "").toLowerCase();
   const plan = config.plans[planId];
 
-  if (!plan || typeof plan.price !== "number") {
+  if (!plan || (typeof plan.price !== "number" && typeof plan.dailyRate !== "number")) {
     return sendError(res, "Plan tidak ditemukan", 400);
   }
+
+  const requestedDays = parseInt(req.body?.days || req.query?.days, 10);
+  const days = Number.isInteger(requestedDays) && requestedDays > 0 ? requestedDays : (plan.durationDays || 7);
+  const dailyRate = plan.dailyRate || Math.round((plan.price || 3500) / (plan.durationDays || 7));
+  const amount = dailyRate * days;
 
   try {
     const created = await qrisRequest("/api/gopay/create", {
       method: "POST",
-      body: { amount: plan.price }
+      body: { amount }
     });
 
     const qr = extractQr(created);
@@ -443,8 +493,10 @@ app.post("/api/buy", async (req, res) => {
     return sendSuccess(res, {
       plan: planId,
       label: plan.label || planId,
-      amount: plan.price,
-      durationDays: plan.durationDays ?? null,
+      amount,
+      days,
+      durationDays: days,
+      dailyRate,
       unlimited: plan.unlimited === true,
       ref: extractRef(created) || null,
       created_at: extractCreatedAt(created) || new Date().toISOString(),
@@ -458,15 +510,20 @@ app.post("/api/buy", async (req, res) => {
 });
 
 app.get("/api/buy/status", async (req, res) => {
-  const planId = String(req.query?.plan || "");
+  const planId = String(req.query?.plan || "").toLowerCase();
   const plan = config.plans[planId];
 
-  if (!plan || typeof plan.price !== "number") {
+  if (!plan) {
     return sendError(res, "Plan tidak ditemukan", 400);
   }
 
+  const requestedDays = parseInt(req.query?.days, 10);
+  const days = Number.isInteger(requestedDays) && requestedDays > 0 ? requestedDays : (plan.durationDays || 7);
+  const dailyRate = plan.dailyRate || Math.round((plan.price || 3500) / (plan.durationDays || 7));
+  const defaultAmount = dailyRate * days;
+
   const ref = req.query?.ref ? String(req.query.ref) : "";
-  const amount = Number(req.query?.amount || plan.price);
+  const amount = Number(req.query?.amount || defaultAmount);
   const createdAt = req.query?.created_at ? String(req.query.created_at) : "";
 
   if (!ref) {
@@ -483,10 +540,7 @@ app.get("/api/buy/status", async (req, res) => {
       return sendSuccess(res, { paid: false, plan: planId, status: statusData, api_key: null });
     }
 
-    let expires = null;
-    if (plan.durationDays) {
-      expires = new Date(Date.now() + plan.durationDays * 86400000).toISOString().slice(0, 10);
-    }
+    const expires = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 
     // Kalau user lagi login: premium ditempel ke akun, bukan key standalone.
     const acct = await currentAccount(req);
@@ -495,6 +549,7 @@ app.get("/api/buy/status", async (req, res) => {
         plan: planId,
         label: plan.label || planId,
         unlimited: plan.unlimited === true,
+        days,
         expires,
         purchased_at: new Date().toISOString(),
         ref
@@ -505,7 +560,7 @@ app.get("/api/buy/status", async (req, res) => {
         paid: true,
         plan: planId,
         label: plan.label || planId,
-        durationDays: plan.durationDays ?? null,
+        durationDays: days,
         unlimited: plan.unlimited === true,
         expires,
         api_key: acct.apiKey,
@@ -515,16 +570,17 @@ app.get("/api/buy/status", async (req, res) => {
       });
     }
 
-    const apiKey = signApiKey({ plan: planId, name: "Kaelyn Buyer", expires });
+    const apiKey = signApiKey({ plan: planId, name: "Arashi Buyer", expires });
 
     return sendSuccess(res, {
       paid: true,
       plan: planId,
       label: plan.label || planId,
-      durationDays: plan.durationDays ?? null,
+      durationDays: days,
       unlimited: plan.unlimited === true,
       expires,
       api_key: apiKey,
+      bound_to_account: false,
       status: statusData
     });
   } catch (err) {

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeBlock from "./CodeBlock";
-import { GithubIcon, TelegramIcon } from "./Icons";
+import { GithubIcon, TelegramIcon, GoogleIcon } from "./Icons";
 import { useToast } from "./Toast";
 import { getJSON, postJSON } from "@/lib/api";
 import { APIKEY_STORAGE } from "@/lib/site";
@@ -34,24 +34,25 @@ function TelegramWidget({ username }) {
 function GuestCard({ cfg }) {
   const tg = cfg?.telegram;
   const gh = cfg?.github;
+  const goog = cfg?.google;
   const tgReady = Boolean(tg?.enabled && tg?.username);
   const ghReady = Boolean(gh?.enabled);
+  const googReady = Boolean(goog?.enabled);
 
   return (
     <div className="card card-pad">
-      <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>Belum login. Masuk untuk melihat kuota dan mengelola API key.</p>
+      <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>Belum login. Masuk untuk melihat kuota token dan mengelola API key.</p>
       <div className="stack" style={{ gap: 10 }}>
-        {tgReady ? <TelegramWidget username={tg.username} /> : (
-          <button type="button" className="btn btn-block" disabled><TelegramIcon /> Login dengan Telegram</button>
-        )}
-        <a className="btn btn-block" href="/api/auth/github" aria-disabled={!ghReady} tabIndex={ghReady ? undefined : -1}>
-          <GithubIcon /> Login dengan GitHub
+        <a className="btn btn-block" href="/api/auth/google" aria-disabled={!googReady} tabIndex={googReady ? undefined : -1}>
+          <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan Google
         </a>
+        <a className="btn btn-block" href="/api/auth/github" aria-disabled={!ghReady} tabIndex={ghReady ? undefined : -1}>
+          <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan GitHub
+        </a>
+        {tgReady ? <TelegramWidget username={tg.username} /> : null}
       </div>
-      {tgReady
-        ? <div className="muted mono-sm" style={{ marginTop: 14 }}>Bot: @{tg.username}</div>
-        : <p className="muted" style={{ fontSize: 12.5, margin: "14px 0 0" }}>Telegram login belum dikonfigurasi server (butuh <code className="inline-code">TELEGRAM_BOT_TOKEN</code> &amp; <code className="inline-code">TELEGRAM_BOT_USERNAME</code>).</p>}
-      {!ghReady && <p className="muted" style={{ fontSize: 12.5, margin: "8px 0 0" }}>GitHub login belum dikonfigurasi server.</p>}
+      {!googReady && <p className="muted" style={{ fontSize: 12.5, margin: "12px 0 0" }}>Google OAuth butuh <code className="inline-code">GOOGLE_CLIENT_ID</code> &amp; <code className="inline-code">GOOGLE_CLIENT_SECRET</code> di environment.</p>}
+      {!ghReady && <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0" }}>GitHub OAuth butuh <code className="inline-code">GITHUB_CLIENT_ID</code> &amp; <code className="inline-code">GITHUB_CLIENT_SECRET</code>.</p>}
     </div>
   );
 }

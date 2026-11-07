@@ -7,17 +7,34 @@ import { useEndpoints } from "@/lib/endpoints";
 import { getJSON } from "@/lib/api";
 import { fmtNum, fmtRp, cx } from "@/lib/format";
 
+const DURATION_OPTIONS = [
+  { days: 1, label: "1 Hari" },
+  { days: 3, label: "3 Hari" },
+  { days: 7, label: "7 Hari (Default)" },
+  { days: 14, label: "14 Hari" },
+  { days: 30, label: "30 Hari" }
+];
+
 export function PlanGrid() {
   const [plans, setPlans] = useState(null);
   const [failed, setFailed] = useState(false);
   const [checkout, setCheckout] = useState(null);
+  const [selectedDays, setSelectedDays] = useState({ premium: 7, vip: 7 });
 
   useEffect(() => {
     let alive = true;
     getJSON("/api/plans").then(({ ok, data }) => {
       if (!alive) return;
-      if (ok && data?.result?.plans) setPlans(data.result.plans);
-      else setFailed(true);
+      if (ok && data?.result?.plans) {
+        setPlans(data.result.plans);
+        const initial = {};
+        for (const p of data.result.plans) {
+          initial[p.id] = p.durationDays || 7;
+        }
+        setSelectedDays((prev) => ({ ...initial, ...prev }));
+      } else {
+        setFailed(true);
+      }
     });
     return () => { alive = false; };
   }, []);
@@ -27,21 +44,59 @@ export function PlanGrid() {
 
   return (
     <>
-      <div className="grid grid-3">
-        {plans.map((p) => (
-          <div key={p.id} className={cx("card plan", p.featured && "featured")}>
-            {p.featured && <span className="plan-badge">TERPOPULER</span>}
-            <span className="plan-label">{p.label}</span>
-            <span className="plan-price">{fmtRp(p.price)}</span>
-            <span className="plan-tag">{p.tagline || ""}</span>
-            <ul>
-              <li>{p.unlimited ? "Request tanpa batas" : `Limit ${fmtNum(p.dailyLimit)} / hari`}</li>
-              <li>{p.durationDays ? `${p.durationDays} hari akses` : "Berlaku selamanya"}</li>
-              <li>API key premium</li>
-            </ul>
-            <button type="button" className="btn btn-primary btn-sm btn-block" onClick={() => setCheckout({ kind: "buy", plan: p.id })}>Pilih</button>
-          </div>
-        ))}
+      <div className="grid grid-2" style={{ maxWidth: 840, margin: "0 auto" }}>
+        {plans.map((p) => {
+          const days = selectedDays[p.id] || p.durationDays || 7;
+          const dailyRate = p.dailyRate || Math.round(p.price / (p.durationDays || 7)) || 500;
+          const currentPrice = dailyRate * days;
+
+          return (
+            <div key={p.id} className={cx("card plan", p.featured && "featured")}>
+              {p.featured && <span className="plan-badge">REKOMENDASI</span>}
+              <span className="plan-label">{p.label}</span>
+              <span className="plan-price">{fmtRp(currentPrice)}</span>
+              <span className="plan-tag" style={{ fontSize: 12 }}>
+                {fmtRp(dailyRate)} / hari · Durasi: {days} hari
+              </span>
+
+              {/* Selector Durasi */}
+              <div style={{ margin: "14px 0 10px" }}>
+                <span className="muted mono-sm" style={{ display: "block", marginBottom: 6, fontSize: 11 }}>
+                  PILIH DURASI PAKET:
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {DURATION_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.days}
+                      type="button"
+                      className={cx("btn btn-xs", days === opt.days ? "btn-primary" : "btn-subtle")}
+                      style={{ fontSize: 11, padding: "4px 8px" }}
+                      onClick={() => setSelectedDays((prev) => ({ ...prev, [p.id]: opt.days }))}
+                    >
+                      {opt.days === 7 ? "7 Hari (Seminggu)" : opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <ul>
+                <li>{p.unlimited ? "Token & request tanpa batas (Unlimited)" : `Limit ${fmtNum(p.dailyLimit || 500)} token / hari`}</li>
+                <li>{p.unlimited ? "Bebas akses semua endpoint" : `10 token / request (s.d. ${(p.dailyLimit || 500) / 10} request / hari)`}</li>
+                <li>{`${days} hari akses aktif`}</li>
+                <li>Akses penuh ke semua endpoint premium &amp; QRIS</li>
+              </ul>
+
+              <button
+                type="button"
+                className="btn btn-primary btn-sm btn-block"
+                style={{ marginTop: 14 }}
+                onClick={() => setCheckout({ kind: "buy", plan: p.id, days })}
+              >
+                Beli {p.label} ({days} Hari - {fmtRp(currentPrice)})
+              </button>
+            </div>
+          );
+        })}
       </div>
       {checkout && <PaymentModal cfg={checkout} onClose={() => setCheckout(null)} />}
     </>

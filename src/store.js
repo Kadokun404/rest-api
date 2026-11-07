@@ -83,15 +83,18 @@ export const kvDel = async (key) => {
   return Number(j.result ?? 0);
 };
 
-export const kvIncr = async (key) => {
+export const kvIncrBy = async (key, amount = 1) => {
+  const amt = Number(amount) || 1;
   if (!hasKv) {
-    const next = Number(mem.get(key) || 0) + 1;
+    const next = Number(mem.get(key) || 0) + amt;
     mem.set(key, String(next));
     return next;
   }
-  const result = unwrap(await restPost(["INCR", String(key)]));
+  const result = unwrap(await restPost(["INCRBY", String(key), String(amt)]));
   return Number(result ?? 0);
 };
+
+export const kvIncr = async (key) => kvIncrBy(key, 1);
 
 export const kvHost = () => (hasKv ? KV_URL.replace(/^https?:\/\//, "") : "memory");
 
