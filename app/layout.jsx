@@ -2,6 +2,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "@/styles/globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import BottomNav from "@/components/BottomNav";
 import MaintenanceBanner from "@/components/MaintenanceBanner";
 import NotifPopup from "@/components/NotifPopup";
 import { ToastProvider } from "@/components/Toast";
@@ -67,6 +68,7 @@ export default function RootLayout({ children }) {
           <MaintenanceBanner />
           <main>{children}</main>
           <Footer />
+          <BottomNav />
           <NotifPopup />
         </ToastProvider>
       </body>

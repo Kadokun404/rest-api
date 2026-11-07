@@ -171,7 +171,7 @@ function GuestCard({ cfg, onLoggedIn }) {
               <input
                 className="input"
                 type="text"
-                placeholder="nama / admin@kadokunn.com"
+                placeholder="username/email@kamu.com"
                 value={loginInput}
                 onChange={(e) => setLoginInput(e.target.value)}
                 required
@@ -182,7 +182,7 @@ function GuestCard({ cfg, onLoggedIn }) {
               <input
                 className="input"
                 type="password"
-                placeholder="••••••••"
+                placeholder="password akun"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 required
@@ -366,6 +366,13 @@ function ProfileCard({ result, onChanged }) {
   const a = result.account;
   const q = result.quota || {};
   const key = result.api_key;
+  const [showKey, setShowKey] = useState(false);
+
+  const isUnlimited = a.owner || a.dev || q.daily_limit === 0;
+  const usedTokens = q.used_today || 0;
+  const totalTokens = isUnlimited ? "Unlimited" : (q.daily_limit || 100);
+  const remainingTokens = isUnlimited ? "∞ Unlimited" : (q.remaining_today != null ? q.remaining_today : 100);
+  const usagePercent = isUnlimited ? 0 : Math.min(100, Math.round((usedTokens / (q.daily_limit || 100)) * 100));
 
   useEffect(() => { if (key) storage.set(APIKEY_STORAGE, key); }, [key]);
 
@@ -385,6 +392,21 @@ function ProfileCard({ result, onChanged }) {
     storage.set(APIKEY_STORAGE, key);
     toast("API key disimpan di browser", "ok");
   }
+  async function copyKey() {
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      toast("API key tersalin ke clipboard!", "ok");
+    } catch {
+      toast("Gagal menyalin key", "err");
+    }
+  }
+
+  const maskedDisplay = key
+    ? showKey
+      ? key
+      : `${key.slice(0, 3)}••••••••••••••••${key.slice(-4)}`
+    : "-";
 
   return (
     <div className="card card-pad">
@@ -399,16 +421,69 @@ function ProfileCard({ result, onChanged }) {
         </span>
       </div>
 
-      <div className="kv"><span className="k">Kuota token harian</span><span className="mono-sm">{String(q.daily_limit)}</span></div>
-      <div className="kv"><span className="k">Terpakai hari ini</span><span className="mono-sm">{String(q.used_today)}</span></div>
-      <div className="kv"><span className="k">Sisa token hari ini</span><span className="mono-sm">{String(q.remaining_today)}</span></div>
-      {a.email && <div className="kv"><span className="k">Email terdaftar</span><span className="mono-sm">{a.email}</span></div>}
-      {a.premium?.expires && <div className="kv"><span className="k">Premium berakhir</span><span className="mono-sm">{a.premium.expires}</span></div>}
+      {/* 3 STAT CARDS */}
+      <div className="account-stat-grid">
+        <div className="account-stat-card">
+          <div className="account-stat-label">Kuota Token Harian</div>
+          <div className="account-stat-value">{totalTokens}</div>
+          <div className="account-stat-sub">{isUnlimited ? "Tanpa batasan limit" : "Reset tiap 00:00 UTC"}</div>
+        </div>
+        <div className="account-stat-card">
+          <div className="account-stat-label">Terpakai Hari Ini</div>
+          <div className="account-stat-value">{usedTokens}</div>
+          <div className="account-stat-sub">1 request = 10 token</div>
+        </div>
+        <div className="account-stat-card">
+          <div className="account-stat-label">Sisa Token</div>
+          <div className="account-stat-value" style={{ color: "var(--accent)" }}>{remainingTokens}</div>
+          <div className="account-stat-sub">{isUnlimited ? "Bypass rate limit" : "Tersedia untuk hari ini"}</div>
+        </div>
+      </div>
 
-      <div style={{ marginTop: 16 }}>
-        <label className="muted" style={{ fontSize: 13 }}>API key</label>
-        <div style={{ margin: "6px 0 10px" }}><CodeBlock title="x-api-key" code={key || "-"} copyText={key || ""} bodyClassName="key-box" /></div>
-        <div className="row">
+      {/* PROGRESS BAR */}
+      <div className="stat-progress-container">
+        <div className="stat-progress-header">
+          <span>Penggunaan Token Hari Ini</span>
+          <span className="mono-sm">{isUnlimited ? "0% (Unlimited)" : `${usagePercent}% (${usedTokens}/${totalTokens})`}</span>
+        </div>
+        <div className="stat-progress-track">
+          <div className="stat-progress-fill" style={{ width: isUnlimited ? "100%" : `${usagePercent}%` }} />
+        </div>
+      </div>
+
+      {a.email && <div className="kv"><span className="k">Email terdaftar</span><span className="mono-sm">{a.email}</span></div>}
+      {a.premium?.expires && <div className="kv"><span className="k">Masa aktif akun</span><span className="mono-sm">{a.premium.expires}</span></div>}
+
+      {/* MASKED API KEY BOX */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <label className="muted" style={{ fontSize: 13, fontWeight: 500 }}>API Key Kamu</label>
+          <span className="muted mono-sm" style={{ fontSize: 11 }}>Header: x-api-key</span>
+        </div>
+
+        <div className="masked-key-wrapper">
+          <span className="masked-key-text">{maskedDisplay}</span>
+          <div className="masked-key-actions">
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => setShowKey((v) => !v)}
+              aria-label={showKey ? "Sembunyikan API Key" : "Tampilkan API Key"}
+            >
+              {showKey ? "Sembunyikan" : "Tampilkan"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-xs btn-primary"
+              onClick={copyKey}
+              aria-label="Salin API Key"
+            >
+              Salin Key
+            </button>
+          </div>
+        </div>
+
+        <div className="row" style={{ marginTop: 14 }}>
           <button type="button" className="btn btn-sm" onClick={resetKey}>Reset API key</button>
           <button type="button" className="btn btn-sm" onClick={saveKey}>Pakai di Try it</button>
           <button type="button" className="btn btn-sm btn-danger" onClick={logout}>Keluar</button>

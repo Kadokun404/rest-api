@@ -5,7 +5,7 @@ import { useEndpoints } from "@/lib/endpoints";
 import { buildSnippets } from "@/lib/snippets";
 import { cx } from "@/lib/format";
 import CodeBlock from "./CodeBlock";
-import EndpointRow from "./EndpointRow";
+import { MethodBadges } from "./EndpointRow";
 import TryIt from "./TryIt";
 import { SearchIcon } from "./Icons";
 
@@ -131,19 +131,65 @@ export default function EndpointExplorer() {
         {!loading && !failed && !current && <p className="muted">Tidak ada hasil.</p>}
         {current && (
           <>
-            <p className="section-title" style={{ textTransform: "capitalize" }}>{current.cat} · {current.list.length} endpoint</p>
-            <div className="ep-list">
-              {current.list.length === 0 && <p className="muted">Tidak ada endpoint.</p>}
-              {current.list.map((ep) => {
-                const open = openEp === ep.endpoint;
-                return (
-                  <div key={ep.endpoint} className={cx("ep-item", open && "open")}>
-                    <EndpointRow ep={ep} open={open} onToggle={() => setOpenEp(open ? null : ep.endpoint)} />
-                    {open && <EndpointDetail ep={{ ...ep, category: current.cat }} />}
-                  </div>
-                );
-              })}
-            </div>
+            <p className="section-title" style={{ textTransform: "capitalize", marginBottom: 16 }}>
+              {current.cat} · {current.list.length} endpoint
+            </p>
+            {current.list.length === 0 ? (
+              <p className="muted">Tidak ada endpoint yang cocok.</p>
+            ) : (
+              <div className="bento-grid">
+                {current.list.map((ep) => {
+                  const open = openEp === ep.endpoint;
+                  const paramCount = Object.keys(ep.params || {}).length;
+                  return (
+                    <div key={ep.endpoint} className={cx("bento-card", open && "open")}>
+                      <div
+                        className="bento-card-header"
+                        onClick={() => setOpenEp(open ? null : ep.endpoint)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <div className="bento-badges">
+                          <MethodBadges methods={ep.method} />
+                          {ep.premium && <span className="badge badge-premium">Premium</span>}
+                        </div>
+                        <span className="mono-sm muted" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                          {current.cat}
+                        </span>
+                      </div>
+
+                      <div
+                        onClick={() => setOpenEp(open ? null : ep.endpoint)}
+                        style={{ cursor: "pointer", flex: 1 }}
+                      >
+                        <h3 className="bento-card-title">{ep.name || ep.endpoint.split("/").pop()}</h3>
+                        <code className="bento-card-endpoint">{ep.endpoint}</code>
+                        <p className="bento-card-desc">
+                          {ep.description || "Endpoint siap pakai dengan performa tinggi."}
+                        </p>
+                      </div>
+
+                      <div className="bento-card-footer">
+                        <span>{paramCount > 0 ? `${paramCount} parameter` : "Tanpa parameter"}</span>
+                        <button
+                          type="button"
+                          className="btn btn-xs"
+                          onClick={() => setOpenEp(open ? null : ep.endpoint)}
+                          style={{ fontWeight: 600 }}
+                        >
+                          {open ? "Tutup ▲" : "Coba / Test ▼"}
+                        </button>
+                      </div>
+
+                      {open && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                          <EndpointDetail ep={{ ...ep, category: current.cat }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
