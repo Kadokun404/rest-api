@@ -13,7 +13,7 @@ export function middleware(request) {
       ua.includes("httpie") ||
       (!ua.includes("mozilla") && accept.includes("text/plain")))
   ) {
-    return new NextResponse("Welcome to Arashi, masuk ke web aja untuk liat endpoint endpoint gokil\n", {
+    return new NextResponse("selamat datang di arashi api :v buka di web https://kadokunn.com buat liat endpoint yang awuwu\n", {
       status: 200,
       headers: {
         "content-type": "text/plain; charset=utf-8",

@@ -1,11 +1,46 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CodeBlock from "./CodeBlock";
 import { GithubIcon, GoogleIcon } from "./Icons";
 import { useToast } from "./Toast";
 import { getJSON, postJSON } from "@/lib/api";
 import { APIKEY_STORAGE } from "@/lib/site";
 import { storage } from "@/lib/storage";
+
+function TelegramWidget({ username }) {
+  const ref = useRef(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const host = ref.current;
+    if (!host || !username) return;
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://telegram.org/js/telegram-widget.js?22";
+    s.setAttribute("data-telegram-login", username);
+    s.setAttribute("data-size", "large");
+    s.setAttribute("data-radius", "10");
+    s.setAttribute("data-auth-url", `${window.location.origin}/api/auth/telegram`);
+    s.setAttribute("data-request-access", "write");
+    s.onerror = () => setFailed(true);
+    host.appendChild(s);
+    return () => { host.innerHTML = ""; };
+  }, [username]);
+
+  if (failed) return null;
+  return (
+    <div
+      ref={ref}
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        minHeight: 40,
+        marginBottom: 2
+      }}
+    />
+  );
+}
 
 function GuestCard({ cfg, onLoggedIn }) {
   const { toast } = useToast();
@@ -189,6 +224,7 @@ function GuestCard({ cfg, onLoggedIn }) {
               </div>
 
               <div className="stack" style={{ gap: 10 }}>
+                {tgReady && <TelegramWidget username={tg.username} />}
                 <a className="btn btn-block" href="/api/auth/google" aria-disabled={!googReady} tabIndex={googReady ? undefined : -1}>
                   <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan Google
                 </a>
