@@ -33,6 +33,29 @@ const client = axios.create({
 })
 
 /**
+ * Fetch HTML dengan fallback native fetch jika axios kena 403
+ */
+async function fetchHtml(url) {
+    try {
+        const { data } = await client.get(url)
+        return data
+    } catch (err) {
+        if (err.response?.status === 403 || String(err.message).includes("403")) {
+            const res = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Referer": "https://www.google.com/"
+                }
+            })
+            if (res.ok) return await res.text()
+        }
+        throw err
+    }
+}
+
+/**
  * Concurrency runner untuk download paralel yang stabil & cepat
  * @template T, R
  * @param {T[]} items 
@@ -92,7 +115,7 @@ export async function searchPixhentai(query, page = 1) {
         ? `${BASE_URL}/page/${page}/?s=${encodeURIComponent(q)}`
         : `${BASE_URL}/?s=${encodeURIComponent(q)}`
 
-    const { data } = await client.get(searchUrl)
+    const data = await fetchHtml(searchUrl)
     const $ = cheerio.load(data)
 
     const results = []
@@ -135,7 +158,7 @@ export async function searchPixhentai(query, page = 1) {
  */
 export async function getPixhentaiDetail(urlOrSlug) {
     const targetUrl = normalizeUrl(urlOrSlug)
-    const { data } = await client.get(targetUrl)
+    const data = await fetchHtml(targetUrl)
     const $ = cheerio.load(data)
 
     const rawTitle = $("h1.entry-title").first().text().trim() || 

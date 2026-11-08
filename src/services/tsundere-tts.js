@@ -280,29 +280,21 @@ async function fetchGoogleVoiceChunk(text) {
 }
 
 /**
- * Ambil audio chunk (AnyToSpeech -> Edge TTS -> Google TTS)
+ * Ambil audio chunk murni dari AnyToSpeech tanpa fallback Google / Edge
  */
-async function fetchSingleChunkAudio(text, model = "anime-girl-tsundere") {
-    try {
-        return await fetchAnyToSpeechChunk(text, model)
-    } catch (e) {
-        console.warn(`[anytospeech fail: ${e.message}, fallback to edge tts]`)
-        try {
-            return await fetchEdgeVoiceChunk(text, model)
-        } catch (edgeErr) {
-            console.warn(`[edge tts fail: ${edgeErr.message}, fallback to google]`)
-            return await fetchGoogleVoiceChunk(text)
-        }
-    }
+async function fetchSingleChunkAudio(text, model = "anime-girl-shy") {
+    // Scraping murni AnyToSpeech dengan auto-refresh token (timeout 20 detik per chunk)
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("AnyToSpeech scrape timeout")), 20000)
+    )
+    return await Promise.race([fetchAnyToSpeechChunk(text, model), timeoutPromise])
 }
 
 /**
- * Gabungkan buffer MP3 dan konversi ke WhatsApp Voice Note (.opus) dengan sentuhan anime formant
+ * Gabungkan buffer MP3 dan konversi ke WhatsApp Voice Note (.opus) natural tanpa slowmo
  */
 async function mergeBuffersToOpusVn(mp3Buffers, destPath) {
     await fs.mkdir(path.dirname(destPath), { recursive: true })
-
-    const animeFilter = "asetrate=24000*1.08,aresample=24000,atempo=1/1.02,equalizer=f=3000:t=q:w=1.2:g=2.5"
 
     // Jika cuma 1 chunk
     if (mp3Buffers.length === 1) {
@@ -310,8 +302,7 @@ async function mergeBuffersToOpusVn(mp3Buffers, destPath) {
             const p = spawn("ffmpeg", [
                 "-y", "-hide_banner", "-loglevel", "error",
                 "-i", "pipe:0",
-                "-af", animeFilter,
-                "-vn", "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", destPath
+                "-vn", "-c:a", "libopus", "-b:a", "64k", "-ar", "48000", "-f", "ogg", destPath
             ])
             p.stdin.on("error", () => {})
             p.on("error", reject)
@@ -320,7 +311,7 @@ async function mergeBuffersToOpusVn(mp3Buffers, destPath) {
         })
     }
 
-    // Jika lebih dari 1 chunk (teks panjang)
+    // Jika lebih dari 1 chunk (teks panjang tanpa batas karakter)
     const tmpDir = path.join(path.dirname(destPath), `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
     await fs.mkdir(tmpDir, { recursive: true })
     const fileListPath = path.join(tmpDir, "files.txt")
@@ -337,8 +328,7 @@ async function mergeBuffersToOpusVn(mp3Buffers, destPath) {
         const p = spawn("ffmpeg", [
             "-y", "-hide_banner", "-loglevel", "error",
             "-f", "concat", "-safe", "0", "-i", fileListPath,
-            "-af", animeFilter,
-            "-vn", "-c:a", "libopus", "-b:a", "64k", "-f", "ogg", destPath
+            "-vn", "-c:a", "libopus", "-b:a", "64k", "-ar", "48000", "-f", "ogg", destPath
         ])
         p.on("error", reject)
         p.on("close", async code => {
@@ -351,20 +341,20 @@ async function mergeBuffersToOpusVn(mp3Buffers, destPath) {
 /**
  * Generate Anime Voice Note tanpa batas karakter & bebas timeout
  * @param {string} text teks percakapan
- * @param {string} [model="anime-girl-tsundere"] "anime-girl-tsundere" atau "anime-girl-shy"
+ * @param {string} [model="anime-girl-shy"] "anime-girl-shy" atau "anime-girl-tsundere"
  * @param {string} [outPath] lokasi output file .opus
  * @returns {Promise<string>} path file opus
  */
-export async function generateAnimeVoice(text, model = "anime-girl-tsundere", outPath = null) {
+export async function generateAnimeVoice(text, model = "anime-girl-shy", outPath = null) {
     const clean = cleanTextForTts(text)
     if (!clean) throw new Error("Teks untuk suara kosong")
 
-    const chunks = splitTextIntoChunks(clean, 220)
+    const chunks = splitTextIntoChunks(clean, 200)
     if (!chunks.length) throw new Error("Teks tidak dapat diproses")
 
     const dest = outPath || path.join(process.cwd(), "temp", "ara-vn", `ara-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.opus`)
 
-    // Generate audio untuk setiap chunk secara berurutan
+    // Generate audio untuk setiap chunk secara berurutan tanpa batas karakter
     const audioBuffers = []
     for (const chunk of chunks) {
         const buf = await fetchSingleChunkAudio(chunk, model)

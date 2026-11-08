@@ -9,9 +9,9 @@ export default {
   params: {
     query: {
       type: "string",
-      required: true,
+      required: false,
       description: "Kata kunci galeri",
-      example: "cosplay"
+      example: "naruto"
     },
     slug: {
       type: "string",
