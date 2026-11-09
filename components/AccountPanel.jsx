@@ -1,12 +1,30 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeBlock from "./CodeBlock";
-import { GithubIcon, GoogleIcon } from "./Icons";
+import { GoogleIcon } from "./Icons";
 import { useToast } from "./Toast";
-import Turnstile from "./Turnstile";
 import { getJSON, postJSON } from "@/lib/api";
 import { APIKEY_STORAGE } from "@/lib/site";
 import { storage } from "@/lib/storage";
+
+const Turnstile = dynamic(() => import("./Turnstile"), {
+  ssr: false,
+  loading: () => (
+    <div
+      style={{
+        minHeight: 65,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        width: "100%",
+        margin: "14px 0"
+      }}
+    >
+      <span className="muted mono-sm" style={{ fontSize: 12 }}>Loading security verification...</span>
+    </div>
+  )
+});
 
 function TelegramWidget({ username }) {
   const ref = useRef(null);
