@@ -13,7 +13,16 @@ export default function Turnstile({
 }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const renderedRef = useRef(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
+
+  // Keep callback references stable to prevent re-render tearing
+  const onVerifyRef = useRef(onVerify);
+  const onExpireRef = useRef(onExpire);
+  const onErrorRef = useRef(onError);
+  onVerifyRef.current = onVerify;
+  onExpireRef.current = onExpire;
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -36,40 +45,46 @@ export default function Turnstile({
     script.defer = true;
     script.onload = () => setScriptLoaded(true);
     script.onerror = () => {
-      if (onError) onError("Failed to load Cloudflare Turnstile script.");
+      if (onErrorRef.current) onErrorRef.current("Failed to load Cloudflare Turnstile script.");
     };
     document.head.appendChild(script);
-  }, [onError]);
+  }, []);
 
   useEffect(() => {
     if (!scriptLoaded || !containerRef.current || !window.turnstile) return;
+    if (renderedRef.current) return;
 
-    // Remove previous widget instance if any
-    if (widgetIdRef.current !== null) {
+    const renderWidget = () => {
+      if (!containerRef.current || !window.turnstile || renderedRef.current) return;
+
       try {
-        window.turnstile.remove(widgetIdRef.current);
-      } catch {}
-      widgetIdRef.current = null;
-    }
+        const id = window.turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          theme: theme,
+          size: "normal",
+          action: "login",
+          callback: (token) => {
+            if (onVerifyRef.current) onVerifyRef.current(token);
+          },
+          "expired-callback": () => {
+            if (onExpireRef.current) onExpireRef.current();
+          },
+          "error-callback": (err) => {
+            console.warn("[Turnstile] verification challenge error:", err);
+            if (onErrorRef.current) onErrorRef.current(err);
+          }
+        });
+        widgetIdRef.current = id;
+        renderedRef.current = true;
+      } catch (err) {
+        console.error("[Turnstile] Render error:", err);
+      }
+    };
 
-    try {
-      const id = window.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        theme: theme,
-        size: "flexible",
-        callback: (token) => {
-          if (onVerify) onVerify(token);
-        },
-        "expired-callback": () => {
-          if (onExpire) onExpire();
-        },
-        "error-callback": (err) => {
-          if (onError) onError(err);
-        }
-      });
-      widgetIdRef.current = id;
-    } catch (err) {
-      console.error("[Turnstile] Render error:", err);
+    if (typeof window.turnstile.ready === "function") {
+      window.turnstile.ready(renderWidget);
+    } else {
+      renderWidget();
     }
 
     return () => {
@@ -78,9 +93,10 @@ export default function Turnstile({
           window.turnstile.remove(widgetIdRef.current);
         } catch {}
         widgetIdRef.current = null;
+        renderedRef.current = false;
       }
     };
-  }, [scriptLoaded, siteKey, theme, onVerify, onExpire, onError]);
+  }, [scriptLoaded, siteKey, theme]);
 
   return (
     <div
@@ -91,10 +107,10 @@ export default function Turnstile({
         justifyContent: "center",
         alignItems: "center",
         width: "100%",
-        margin: "12px 0"
+        margin: "14px 0"
       }}
     >
-      <div ref={containerRef} style={{ width: "100%", maxWidth: 320 }} />
+      <div ref={containerRef} style={{ width: 300, minHeight: 65 }} />
     </div>
   );
 }

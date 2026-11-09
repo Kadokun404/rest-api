@@ -252,14 +252,6 @@ function GuestCard({ cfg, onLoggedIn }) {
                 >
                   <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Sign in with Google
                 </a>
-                <a
-                  className="btn btn-block"
-                  href={turnstileToken && ghReady ? "/api/auth/github" : undefined}
-                  aria-disabled={!turnstileToken || !ghReady}
-                  tabIndex={turnstileToken && ghReady ? undefined : -1}
-                >
-                  <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Sign in with GitHub
-                </a>
               </div>
             </>
           )}
