@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CodeBlock from "./CodeBlock";
 import { GithubIcon, GoogleIcon } from "./Icons";
 import { useToast } from "./Toast";
+import Turnstile from "./Turnstile";
 import { getJSON, postJSON } from "@/lib/api";
 import { APIKEY_STORAGE } from "@/lib/site";
 import { storage } from "@/lib/storage";
@@ -46,6 +47,7 @@ function GuestCard({ cfg, onLoggedIn }) {
   const { toast } = useToast();
   const [mode, setMode] = useState("login"); // "login" | "register" | "verify"
   const [submitting, setSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   // Form states
   const [loginInput, setLoginInput] = useState("");
@@ -70,23 +72,28 @@ function GuestCard({ cfg, onLoggedIn }) {
 
   async function handleLogin(e) {
     e.preventDefault();
+    if (!turnstileToken) {
+      toast("Please complete the Cloudflare security verification.", "err");
+      return;
+    }
     if (!loginInput || !loginPassword) {
-      toast("Email/Username dan password wajib diisi", "err");
+      toast("Email or Username and password are required.", "err");
       return;
     }
     setSubmitting(true);
     const { ok, data } = await postJSON("/api/auth/login", {
       login: loginInput,
-      password: loginPassword
+      password: loginPassword,
+      turnstileToken
     });
     setSubmitting(false);
 
     if (ok && data?.status === true) {
-      toast(data.result?.message || "Login berhasil!", "ok");
+      toast(data.result?.message || "Login successful.", "ok");
       if (data.result?.api_key) storage.set(APIKEY_STORAGE, data.result.api_key);
       onLoggedIn();
     } else {
-      toast(data?.message || "Login gagal", "err");
+      toast(data?.message || "Login failed.", "err");
     }
   }
 
@@ -171,19 +178,19 @@ function GuestCard({ cfg, onLoggedIn }) {
         {mode === "login" && (
             <>
               <div style={{ marginBottom: 18 }}>
-                <h3 style={{ margin: "0 0 6px" }}>Masuk ke Akun</h3>
+                <h3 style={{ margin: "0 0 6px" }}>Sign In to Account</h3>
                 <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                  Gunakan email atau username untuk mengelola kuota token dan API key.
+                  Enter your credentials or authenticate via provider to access your dashboard.
                 </p>
               </div>
 
               <form onSubmit={handleLogin} className="stack" style={{ gap: 12 }}>
                 <div className="field">
-                  <label>Email atau Username</label>
+                  <label>Email or Username</label>
                   <input
                     className="input"
                     type="text"
-                    placeholder="username/email@kamu.com"
+                    placeholder="user@example.com"
                     value={loginInput}
                     onChange={(e) => setLoginInput(e.target.value)}
                     required
@@ -194,42 +201,64 @@ function GuestCard({ cfg, onLoggedIn }) {
                   <input
                     className="input"
                     type="password"
-                    placeholder="password akun"
+                    placeholder="Enter your password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
                   />
                 </div>
-                <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-                  {submitting ? "Memproses..." : "Masuk"}
+
+                <Turnstile
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAAF5bdLdTVW232IGD"}
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken("")}
+                  onError={() => setTurnstileToken("")}
+                />
+
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-block"
+                  disabled={submitting || !turnstileToken || !loginInput.trim() || !loginPassword.trim()}
+                >
+                  {submitting ? "Authenticating..." : "Access your Dashboard"}
                 </button>
               </form>
 
               <div style={{ marginTop: 14, textAlign: "center", fontSize: 13 }}>
-                <span className="muted">Belum punya akun? </span>
+                <span className="muted">Don't have an account? </span>
                 <button
                   type="button"
                   className="btn btn-xs"
                   style={{ padding: "2px 8px", color: "var(--accent, #f25c05)", fontWeight: 600 }}
                   onClick={() => setMode("register")}
                 >
-                  Daftar sekarang!
+                  Register now
                 </button>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 16px" }}>
                 <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                <span className="muted mono-sm" style={{ fontSize: 11 }}>ATAU MASUK LEWAT</span>
+                <span className="muted mono-sm" style={{ fontSize: 11 }}>OR CONTINUE WITH</span>
                 <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               </div>
 
               <div className="stack" style={{ gap: 10 }}>
                 {tgReady && <TelegramWidget username={tg.username} />}
-                <a className="btn btn-block" href="/api/auth/google" aria-disabled={!googReady} tabIndex={googReady ? undefined : -1}>
-                  <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan Google
+                <a
+                  className="btn btn-block"
+                  href={turnstileToken && googReady ? "/api/auth/google" : undefined}
+                  aria-disabled={!turnstileToken || !googReady}
+                  tabIndex={turnstileToken && googReady ? undefined : -1}
+                >
+                  <GoogleIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Sign in with Google
                 </a>
-                <a className="btn btn-block" href="/api/auth/github" aria-disabled={!ghReady} tabIndex={ghReady ? undefined : -1}>
-                  <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Login dengan GitHub
+                <a
+                  className="btn btn-block"
+                  href={turnstileToken && ghReady ? "/api/auth/github" : undefined}
+                  aria-disabled={!turnstileToken || !ghReady}
+                  tabIndex={turnstileToken && ghReady ? undefined : -1}
+                >
+                  <GithubIcon style={{ width: 18, height: 18, marginRight: 8 }} /> Sign in with GitHub
                 </a>
               </div>
             </>

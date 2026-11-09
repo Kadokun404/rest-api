@@ -213,7 +213,36 @@ app.post("/api/auth/logout", (req, res) => {
   return sendSuccess(res, { logged_out: true });
 });
 
+async function verifyTurnstileToken(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET_KEY || "0x4AAAAAAF5bdCsIbeAJYsg8AF4ZfQMd2k0";
+  if (!secret) return true;
+  if (!token) return false;
+  try {
+    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        secret,
+        response: token,
+        ...(ip ? { remoteip: ip } : {})
+      })
+    });
+    const result = await resp.json();
+    return Boolean(result.success);
+  } catch (err) {
+    console.error("[Turnstile] verification error:", err.message);
+    return false;
+  }
+}
+
 app.post("/api/auth/login", async (req, res) => {
+  const turnstileToken = req.body?.turnstileToken || req.headers["cf-turnstile-response"];
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress;
+  const isHuman = await verifyTurnstileToken(turnstileToken, ip);
+  if (!isHuman) {
+    return sendError(res, "Security verification failed. Please complete the verification.", 403);
+  }
+
   const login = String(req.body?.login || req.body?.username || req.body?.email || "").trim();
   const password = String(req.body?.password || "");
 
