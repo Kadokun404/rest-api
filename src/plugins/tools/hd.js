@@ -1,5 +1,5 @@
 import multer from "multer";
-import { safeFetch } from "../../function.js";
+import { uploadToGitHub } from "../../services/githubStorage.js";
 import { buildProxiedUrl } from "../../mediaProxy.js";
 
 const MAX_PIXELS = 33177600;
@@ -16,17 +16,8 @@ const runMulter = (req, res) =>
   });
 
 const uploadToCdn = async (buffer, filename, mime = "image/jpeg") => {
-  const form = new FormData();
-  form.append("file", new Blob([buffer], { type: mime }), filename || "image.jpg");
-
-  const res = await safeFetch("https://cloud.yardansh.com/upload", { method: "POST", body: form }, 30000);
-  const data = await res.json();
-
-  if (!res.ok || !data || !data.url) {
-    throw new Error("upload gagal: " + JSON.stringify(data || { status: res.status }));
-  }
-
-  return data.url;
+  const result = await uploadToGitHub(buffer, filename || "image.jpg", mime);
+  return result.cdn_url;
 };
 
 const resizeIfHuge = async (buffer) => {
@@ -46,7 +37,7 @@ const resizeIfHuge = async (buffer) => {
 export default {
   name: "HD Upscale",
   category: "tools",
-  description: "Menaikkan resolusi gambar dengan AI (iloveimg). Kirim file via POST (otomatis di-upload ke cloud.yardansh.com) atau sertakan parameter 'url'. Mendukung upscale 2x dan 4x",
+  description: "Menaikkan resolusi gambar dengan AI (iloveimg). Kirim file via POST (otomatis di-upload ke GitHub storage) atau sertakan parameter 'url'. Mendukung upscale 2x dan 4x",
   method: ["POST"],
   timeout: 60000,
   params: {
@@ -59,7 +50,7 @@ export default {
     file: {
       type: "file",
       required: false,
-      description: "Upload file gambar (multipart/form-data). Dikirim ke cloud.yardansh.com dulu lalu di-HD-kan"
+      description: "Upload file gambar (multipart/form-data). Dikirim ke GitHub storage dulu lalu di-HD-kan"
     },
     scale: {
       type: "number",

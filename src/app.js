@@ -47,6 +47,7 @@ import { config } from "./config.js";
 import { todayUTC, kvGet, kvSet, kvSetEx, kvDel, kvScan, kvMGet } from "./store.js";
 import { sendVerificationEmail } from "./mail.js";
 import { handleMediaProxy, buildPermanentUrl, inferExt } from "./mediaProxy.js";
+import { uploadToGitHub } from "./services/githubStorage.js";
 
 const app = express();
 
@@ -1008,8 +1009,22 @@ const runUploadMulter = (req, res) =>
   });
 
 app.post("/upload", async (req, res) => {
-  if (!(await authorizeRequest(req, res, { premium: false }))) {
-    return;
+  const hasKey = req.headers?.["x-api-key"] || req.headers?.authorization || req.query?.apikey || req.query?.api_key;
+  if (hasKey) {
+    if (!(await authorizeRequest(req, res, { premium: false }))) {
+      return;
+    }
+  } else {
+    const sess = getSessionPayload(req);
+    if (sess?.a) {
+      const acct = await getAccount(sess.a);
+      if (acct?.apiKey) {
+        req.headers["x-api-key"] = acct.apiKey;
+        if (!(await authorizeRequest(req, res, { premium: false }))) {
+          return;
+        }
+      }
+    }
   }
 
   try {
@@ -1031,33 +1046,23 @@ app.post("/upload", async (req, res) => {
   const filename = String(file.originalname || "file").replace(/[/\\]/g, "_").slice(0, 120);
   const mimetype = file.mimetype || "application/octet-stream";
 
-  // Simpan bytes ke storage (bisa dikonfigurasi), lalu ekspos via domain sendiri.
-  const storageUrl = process.env.UPLOAD_STORAGE_URL || "https://cloud.yardansh.com/upload";
-
-  const form = new FormData();
-  form.append("file", new Blob([file.buffer], { type: mimetype }), filename);
-
   try {
-    const cdnRes = await safeFetch(storageUrl, { method: "POST", body: form }, 60000);
-    const data = await cdnRes.json().catch(() => null);
-    const storedUrl = typeof data?.url === "string" ? data.url : null;
-
-    if (!cdnRes.ok || !storedUrl) {
-      throw new Error("Storage menolak file: " + JSON.stringify(data || { status: cdnRes.status }));
-    }
-
+    const uploaded = await uploadToGitHub(file.buffer, filename, mimetype);
     const ext = inferExt(filename === "file" ? "" : filename, "");
-    const url = await buildPermanentUrl(req, storedUrl, ext || undefined);
+    const url = await buildPermanentUrl(req, uploaded.cdn_url, ext || undefined);
 
     return sendSuccess(res, {
       url,
+      cdn_url: uploaded.cdn_url,
+      raw_url: uploaded.raw_url,
+      github_url: uploaded.github_url,
       filename,
       mimetype,
       size: file.size,
       max_size: UPLOAD_MAX_BYTES
     });
   } catch (err) {
-    return sendError(res, err.message || "Gagal upload file", 502);
+    return sendError(res, err.message || "Gagal upload file ke GitHub", 502);
   }
 });
 
