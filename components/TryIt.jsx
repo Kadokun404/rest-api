@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import CodeBlock from "./CodeBlock";
 import JsonView from "./JsonView";
 import { CopyIcon, CheckIcon, ImageIcon } from "./Icons";
@@ -11,6 +11,8 @@ export default function TryIt({
   ep,
   method: parentMethod,
   setMethod: parentSetMethod,
+  apiKey: parentApiKey,
+  setApiKey: parentSetApiKey,
   values: parentValues,
   setValues: parentSetValues,
   files: parentFiles,
@@ -22,6 +24,7 @@ export default function TryIt({
 
   // Local state fallbacks if not controlled by parent
   const [localMethod, setLocalMethod] = useState(availableMethods[0] || "GET");
+  const [localApiKey, setLocalApiKey] = useState(() => (typeof window !== "undefined" ? storage.get(APIKEY_STORAGE) || "" : ""));
   const [localValues, setLocalValues] = useState(() =>
     Object.fromEntries(params.filter(([, v]) => v.type !== "file").map(([k, v]) => [k, v.example != null ? String(v.example) : ""]))
   );
@@ -29,6 +32,8 @@ export default function TryIt({
 
   const method = parentMethod !== undefined ? parentMethod : localMethod;
   const setMethod = parentSetMethod || setLocalMethod;
+  const apiKey = parentApiKey !== undefined ? parentApiKey : localApiKey;
+  const setApiKey = parentSetApiKey || setLocalApiKey;
   const values = parentValues !== undefined ? parentValues : localValues;
   const setValues = parentSetValues || setLocalValues;
   const files = parentFiles !== undefined ? parentFiles : localFiles;
@@ -39,19 +44,18 @@ export default function TryIt({
   const [copied, setCopied] = useState(false);
   const [uploadingKey, setUploadingKey] = useState(null);
 
-  // Helper untuk deteksi apakah parameter ini menerima gambar
-  const isImageParam = (k, v) => {
-    if (v.type === "file") return true;
-    const key = k.toLowerCase();
-    const desc = (v.description || "").toLowerCase();
+  // Hanya endpoint khusus HD / Image Upscale yang boleh menampilkan tombol galeri
+  const isImageEnhanceTool = () => {
+    const epPath = (ep?.endpoint || "").toLowerCase();
+    const epName = (ep?.name || "").toLowerCase();
     return (
-      key === "url" ||
-      key.includes("image") ||
-      key.includes("img") ||
-      key.includes("foto") ||
-      desc.includes("gambar") ||
-      desc.includes("foto") ||
-      desc.includes("image")
+      epPath === "/tools/image-enlarger" ||
+      epPath === "/tools/hd" ||
+      epPath.includes("enlarger") ||
+      epPath.includes("/tools/hd") ||
+      epName.includes("enlarge") ||
+      epName.includes("upscaler") ||
+      epName.includes("perjelas")
     );
   };
 
@@ -76,10 +80,22 @@ export default function TryIt({
   }
 
   async function run() {
+    // Validasi API Key wajib di semua endpoint
+    const finalKey = (apiKey && apiKey.trim()) || storage.get(APIKEY_STORAGE);
+    if (!finalKey) {
+      setResult({
+        error: "API Key wajib diisi untuk semua endpoint! Masukkan API key kamu pada kolom di atas atau buka menu Akun untuk mendapatkan API key gratis."
+      });
+      return;
+    }
+
     setRunning(true);
     setResult({ pending: true });
 
-    const headers = {};
+    const headers = {
+      "x-api-key": finalKey
+    };
+
     let url = ep.endpoint;
     let body;
     const fileKey = params.find(([, v]) => v.type === "file")?.[0];
@@ -101,9 +117,6 @@ export default function TryIt({
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(values);
     }
-
-    const key = storage.get(APIKEY_STORAGE);
-    if (ep.premium && key) headers["x-api-key"] = key;
 
     const t0 = performance.now();
     try {
@@ -156,11 +169,40 @@ export default function TryIt({
         </div>
       )}
 
-      {/* Input parameters */}
+      {/* Kolom input API Key (Wajib untuk semua endpoint) */}
+      <div className="field" style={{ marginBottom: 16 }}>
+        <label htmlFor="p-apikey" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontWeight: 600 }}>
+            API Key <span className="req">*</span>
+          </span>
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            Header: x-api-key · {apiKey ? "Tersimpan" : "Wajib diisi"}
+          </span>
+        </label>
+        <input
+          id="p-apikey"
+          className="input"
+          type="text"
+          placeholder="Masukkan API key kamu (contoh: kado_...)"
+          value={apiKey}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => {
+            const val = e.target.value.trim();
+            setApiKey(val);
+            storage.set(APIKEY_STORAGE, val);
+          }}
+          style={{ fontFamily: "monospace", fontSize: 13, marginTop: 6 }}
+        />
+      </div>
+
+      {/* Input parameters endpoint */}
       {params.length ? (
         params.map(([k, v]) => {
           const isFile = v.type === "file";
-          const isImage = isImageParam(k, v);
+          // HANYA endpoint khusus HD foto yang menampilkan picker galeri
+          const isPhotoEnhanceParam = isImageEnhanceTool() && (k === "url" || k.includes("image") || k.includes("foto"));
 
           return (
             <div className="field" key={k} style={{ marginBottom: 16 }}>
@@ -175,7 +217,7 @@ export default function TryIt({
               </label>
 
               {isFile ? (
-                /* Custom Gallery Image Upload Box - menggantikan browser file default */
+                /* Custom Gallery Image Upload Box untuk type: "file" */
                 <div style={{ marginTop: 6 }}>
                   <input
                     id={`file-${k}`}
@@ -228,8 +270,8 @@ export default function TryIt({
                     </button>
                   )}
                 </div>
-              ) : isImage ? (
-                /* Text input untuk URL gambar dengan tombol gallery picker instan */
+              ) : isPhotoEnhanceParam ? (
+                /* Khusus tools HD foto: Input URL + tombol galeri */
                 <div style={{ marginTop: 6 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <input
@@ -256,14 +298,13 @@ export default function TryIt({
                       style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", padding: "8px 12px" }}
                       onClick={() => document.getElementById(`gallery-upload-${k}`)?.click()}
                       disabled={uploadingKey === k}
-                      title="Pilih foto langsung dari galeri HP / perangkat"
+                      title="Pilih foto langsung dari galeri untuk HD-in foto"
                     >
                       <ImageIcon style={{ width: 16, height: 16, color: "var(--accent)" }} />
                       <span>{uploadingKey === k ? "Mengunggah..." : "Galeri"}</span>
                     </button>
                   </div>
 
-                  {/* Preview thumbnail foto bila terisi URL gambar */}
                   {values[k] && typeof values[k] === "string" && values[k].startsWith("http") && (
                     <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
                       <img
@@ -272,12 +313,12 @@ export default function TryIt({
                         style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }}
                         onError={(e) => { e.currentTarget.style.display = "none"; }}
                       />
-                      <span className="muted" style={{ fontSize: 11.5 }}>Preview foto aktif siap diproses</span>
+                      <span className="muted" style={{ fontSize: 11.5 }}>Preview foto aktif siap di-HD-in</span>
                     </div>
                   )}
                 </div>
               ) : (
-                /* Standard input text */
+                /* Endpoint umum (Spotify, TikTok, YouTube, Pornhub, Hanime1, dll) - HANYA INPUT TEXT BIASA */
                 <input
                   id={`p-${k}`}
                   className="input"
@@ -294,7 +335,7 @@ export default function TryIt({
           );
         })
       ) : (
-        <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Langsung jalankan tanpa parameter.</p>
+        <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Langsung jalankan dengan API key di atas.</p>
       )}
 
       {/* Action Buttons: Run & Copy cURL */}
@@ -309,7 +350,7 @@ export default function TryIt({
             className="btn btn-sm"
             style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             onClick={copyCurl}
-            title="Salin cURL dengan parameter dan method saat ini"
+            title="Salin cURL dengan parameter, API key, dan method saat ini"
           >
             {copied ? (
               <>
@@ -326,7 +367,7 @@ export default function TryIt({
         )}
 
         <span className="muted" style={{ fontSize: 12.5 }}>
-          {ep.premium ? "Endpoint premium · butuh apikey." : "Endpoint publik."}
+          {apiKey ? "API key aktif." : "Wajib sertakan API key."}
         </span>
       </div>
 

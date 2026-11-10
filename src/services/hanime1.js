@@ -16,9 +16,25 @@ const HEADERS = [
  * Fetch HTML via curl HTTP/2 untuk bypass Cloudflare
  */
 async function fetchHtml(url) {
-    const args = ["-s", "--compressed", ...HEADERS, url]
-    const { stdout } = await execFileAsync("curl", args, { timeout: 25000 })
-    return stdout
+    const args = ["-s", "-L", "--max-redirs", "5", "--compressed", "-H", "Accept-Encoding: gzip, deflate", ...HEADERS, url]
+    try {
+        const { stdout } = await execFileAsync("curl", args, { timeout: 25000, maxBuffer: 15 * 1024 * 1024 })
+        if (stdout && stdout.length > 200) return stdout
+    } catch (e) {
+        console.error("hanime1 fetchHtml error:", e.message)
+    }
+    try {
+        const res = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                "Referer": "https://hanime1.me/",
+                "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            signal: AbortSignal.timeout(15000)
+        })
+        if (res.ok) return await res.text()
+    } catch {}
+    return ""
 }
 
 /**

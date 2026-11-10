@@ -8,6 +8,8 @@ import CodeBlock from "./CodeBlock";
 import { MethodBadges } from "./EndpointRow";
 import TryIt from "./TryIt";
 import { SearchIcon } from "./Icons";
+import { APIKEY_STORAGE } from "@/lib/site";
+import { storage } from "@/lib/storage";
 
 const TABS = [["curl", "curl"], ["javascript", "JavaScript"], ["python", "Python"]];
 
@@ -19,10 +21,16 @@ function EndpointDetail({ ep }) {
   const params = Object.entries(ep.params || {});
   const availableMethods = Array.isArray(ep.method) ? ep.method : [ep.method || "GET"];
   const [method, setMethod] = useState(availableMethods[0] || "GET");
+  const [apiKey, setApiKey] = useState("");
   const [values, setValues] = useState(() =>
     Object.fromEntries(params.filter(([, v]) => v.type !== "file").map(([k, v]) => [k, v.example != null ? String(v.example) : ""]))
   );
   const [files, setFiles] = useState({});
+
+  useEffect(() => {
+    const savedKey = storage.get(APIKEY_STORAGE) || "";
+    setApiKey(savedKey);
+  }, []);
 
   useEffect(() => {
     const nextMethods = Array.isArray(ep.method) ? ep.method : [ep.method || "GET"];
@@ -32,8 +40,8 @@ function EndpointDetail({ ep }) {
   }, [ep.endpoint]);
 
   const snippets = useMemo(() =>
-    buildSnippets(ep, values, files, method),
-    [ep, values, files, method]
+    buildSnippets(ep, values, files, method, apiKey),
+    [ep, values, files, method, apiKey]
   );
 
   return (
@@ -66,6 +74,8 @@ function EndpointDetail({ ep }) {
           ep={ep}
           method={method}
           setMethod={setMethod}
+          apiKey={apiKey}
+          setApiKey={setApiKey}
           values={values}
           setValues={setValues}
           files={files}

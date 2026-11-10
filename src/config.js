@@ -68,7 +68,10 @@ export const config = {
 // { key: "ka-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", name: "Owner", plan: "premium" },
 // { key: "ka-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", name: "Teman", plan: "free", dailyLimit: 1000 },
 // { key: "ka-xxx…(signed)…", name: "Klien A", plan: "premium", expires: "2026-12-31" }
-export const localKeys = [];
+export const localKeys = [
+  { key: "ka-kadokun-master-vip-2026", name: "Kado (Owner)", plan: "vip", unlimited: true },
+  { key: "ka-arashi-bot-vip-access-2026", name: "Arashi Bot", plan: "vip", unlimited: true }
+];
 
 // Kredensial Spotify (untuk metadata lagu di plugin /search/genius).
 // Wajib diisi lewat env SPOTIFY_CLIENT_ID & SPOTIFY_CLIENT_SECRET, kalau kosong endpoint genius akan 404.

@@ -4,12 +4,13 @@ import * as cheerio from "cheerio"
 import { decode } from "html-entities"
 import fs from "node:fs"
 import path from "node:path"
+import os from "node:os"
 
 const execFileAsync = promisify(execFile)
 const BASE_URL = "https://www.pornhub.com"
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-const COOKIE_PATH = path.resolve("./temp/ph_session_cookies.txt")
+const COOKIE_PATH = path.join(os.tmpdir(), "ph_session_cookies.txt")
 
 const HEADERS = [
     "-H", `User-Agent: ${USER_AGENT}`,
@@ -23,9 +24,6 @@ const HEADERS = [
  * @returns {Promise<string>}
  */
 export async function fetchHtml(url) {
-    const tempDir = path.resolve("./temp")
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
-
     const args = [
         "-s", "-L",
         "--cookie", COOKIE_PATH,
