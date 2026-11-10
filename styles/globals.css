@@ -1259,3 +1259,26 @@ html:not(.dark) .stat-progress-track {
   border-radius: 10px;
 }
 
+.avatar-edit-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  border: 2px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, background 0.2s;
+}
+.avatar-edit-badge:hover {
+  transform: scale(1.12);
+  background: var(--accent-light, #ff4d8d);
+}
+
+

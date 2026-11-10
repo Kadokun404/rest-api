@@ -588,10 +588,10 @@ app.post("/api/auth/profile", async (req, res) => {
   if (typeof body.photo === "string") {
     if (body.photo === "") {
       acct.photo = null;
-    } else if (/^data:image\/(png|jpe?g|webp|gif);base64,/.test(body.photo) && body.photo.length <= 400000) {
+    } else if (/^https?:\/\//i.test(body.photo) || (/^data:image\/(png|jpe?g|webp|gif);base64,/.test(body.photo) && body.photo.length <= 1200000)) {
       acct.photo = body.photo;
     } else {
-      return sendError(res, "Foto tidak valid. Kirim data URI gambar (base64), maks ~300KB", 400);
+      return sendError(res, "Foto tidak valid. Kirim URL gambar atau data URI base64", 400);
     }
   }
 

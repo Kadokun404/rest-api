@@ -2,8 +2,9 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeBlock from "./CodeBlock";
-import { GoogleIcon } from "./Icons";
+import { GoogleIcon, ImageIcon } from "./Icons";
 import { useToast } from "./Toast";
+import AvatarCropperModal from "./AvatarCropperModal";
 import { getJSON, postJSON } from "@/lib/api";
 import { APIKEY_STORAGE } from "@/lib/site";
 import { storage } from "@/lib/storage";
@@ -419,6 +420,8 @@ function ProfileCard({ result, onChanged }) {
   const q = result.quota || {};
   const key = result.api_key;
   const [showKey, setShowKey] = useState(false);
+  const [selectedFileForCrop, setSelectedFileForCrop] = useState(null);
+  const fileInputRef = useRef(null);
 
   const isUnlimited = a.owner || a.dev || q.daily_limit === 0;
   const usedTokens = q.used_today || 0;
@@ -462,6 +465,18 @@ function ProfileCard({ result, onChanged }) {
 
   return (
     <div className="account-profile-container">
+      {/* Modal 1:1 Cropper */}
+      {selectedFileForCrop && (
+        <AvatarCropperModal
+          file={selectedFileForCrop}
+          onClose={() => setSelectedFileForCrop(null)}
+          onSuccess={() => {
+            setSelectedFileForCrop(null);
+            onChanged();
+          }}
+        />
+      )}
+
       <div className="page-head" style={{ marginBottom: 24, textAlign: "left" }}>
         <span className="sub-badge" style={{ marginBottom: 8, display: "inline-block" }}>[ DEVELOPER DASHBOARD ]</span>
         <h1 style={{ margin: "0 0 6px" }}>Akun Developer</h1>
@@ -472,11 +487,50 @@ function ProfileCard({ result, onChanged }) {
 
       <div className="card card-pad">
         <div className="profile">
-          {a.photo ? <img className="avatar" src={a.photo} alt="" referrerPolicy="no-referrer" /> : <span className="avatar-fallback">{(a.name || "?")[0].toUpperCase()}</span>}
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            {a.photo ? (
+              <img className="avatar" src={a.photo} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="avatar-fallback">{(a.name || "?")[0].toUpperCase()}</span>
+            )}
+            <button
+              type="button"
+              className="avatar-edit-badge"
+              onClick={() => fileInputRef.current?.click()}
+              title="Ganti foto profil (1:1)"
+              aria-label="Ganti foto profil"
+            >
+              <ImageIcon style={{ width: 13, height: 13 }} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setSelectedFileForCrop(f);
+                e.target.value = "";
+              }}
+            />
+          </div>
+
           <div className="profile-info">
             <div className="profile-name">{a.name || "Tanpa nama"}</div>
             <div className="muted mono-sm">{a.provider || ""}{a.username ? ` · @${a.username}` : ""}{a.owner ? " · Owner / Dev" : a.dev ? " · Dev" : ""}</div>
+            <div style={{ marginTop: 6 }}>
+              <button
+                type="button"
+                className="btn btn-xs"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px" }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImageIcon style={{ width: 13, height: 13, color: "var(--accent)" }} />
+                <span>Ganti Foto dari Galeri (1:1)</span>
+              </button>
+            </div>
           </div>
+
           <span className="pill" style={a.owner || a.dev ? { background: "var(--accent, #f25c05)", color: "#fff", fontWeight: 700 } : undefined}>
             {a.owner || a.dev ? "Dev & Owner (Unlimited)" : (a.premium ? a.premium.label : "Free")}
           </span>
