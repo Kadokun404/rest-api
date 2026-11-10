@@ -1225,3 +1225,37 @@ html:not(.dark) .stat-progress-track {
   margin: 20px auto 60px;
   width: 100%;
 }
+
+/* Custom Gallery Upload Box for TryIt & Endpoints */
+.btn-gallery-upload {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border: 1.5px dashed rgba(255, 24, 93, 0.4);
+  background: rgba(255, 24, 93, 0.04);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-gallery-upload:hover {
+  border-color: var(--accent);
+  background: rgba(255, 24, 93, 0.09);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+.gallery-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 24, 93, 0.3);
+  background: var(--surface);
+  border-radius: 10px;
+}
+

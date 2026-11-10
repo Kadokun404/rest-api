@@ -16,8 +16,25 @@ const matches = (ep, q) =>
 
 function EndpointDetail({ ep }) {
   const [tab, setTab] = useState("curl");
-  const snippets = useMemo(() => buildSnippets(ep), [ep]);
   const params = Object.entries(ep.params || {});
+  const availableMethods = Array.isArray(ep.method) ? ep.method : [ep.method || "GET"];
+  const [method, setMethod] = useState(availableMethods[0] || "GET");
+  const [values, setValues] = useState(() =>
+    Object.fromEntries(params.filter(([, v]) => v.type !== "file").map(([k, v]) => [k, v.example != null ? String(v.example) : ""]))
+  );
+  const [files, setFiles] = useState({});
+
+  useEffect(() => {
+    const nextMethods = Array.isArray(ep.method) ? ep.method : [ep.method || "GET"];
+    setMethod(nextMethods[0] || "GET");
+    setValues(Object.fromEntries(params.filter(([, v]) => v.type !== "file").map(([k, v]) => [k, v.example != null ? String(v.example) : ""])));
+    setFiles({});
+  }, [ep.endpoint]);
+
+  const snippets = useMemo(() =>
+    buildSnippets(ep, values, files, method),
+    [ep, values, files, method]
+  );
 
   return (
     <div className="ep-detail wide">
@@ -44,7 +61,17 @@ function EndpointDetail({ ep }) {
         ) : <p className="muted" style={{ fontSize: 13, margin: 0 }}>Tanpa parameter.</p>}
 
         <h3>Try it</h3>
-        <TryIt key={ep.endpoint} ep={ep} />
+        <TryIt
+          key={ep.endpoint}
+          ep={ep}
+          method={method}
+          setMethod={setMethod}
+          values={values}
+          setValues={setValues}
+          files={files}
+          setFiles={setFiles}
+          snippets={snippets}
+        />
       </div>
 
       <div>
