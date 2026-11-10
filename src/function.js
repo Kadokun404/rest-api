@@ -316,17 +316,12 @@ export const authorizeRequest = async (req, res, target) => {
   }
 
   if (resolved.none) {
-    if (needsPremium) {
-      sendError(
-        res,
-        "Endpoint ini khusus premium. Sertakan API key lewat header 'x-api-key' atau query '?apikey='",
-        401
-      );
-      return false;
-    }
-
-    const anonLimit = Number(config.anonymousDailyLimit) || 100;
-    return consumeQuota(res, `ip:${getClientIp(req)}`, anonLimit, tokenCost);
+    sendError(
+      res,
+      "API key wajib disertakan. Kirim lewat header 'x-api-key' atau query '?apikey='",
+      401
+    );
+    return false;
   }
 
   const { entry, id } = resolved;

@@ -101,9 +101,9 @@ export default function DocsPage() {
               Arashi API menggunakan sistem autentikasi fleksibel:
             </p>
             <ul style={{ paddingLeft: 20, margin: "0 0 16px", fontSize: 14, lineHeight: 1.7 }} className="muted">
-              <li><strong style={{ color: "var(--text)" }}>Endpoint Publik:</strong> Dapat langsung dipanggil tanpa registrasi atau API key.</li>
-              <li><strong style={{ color: "var(--text)" }}>Endpoint Berkuota / Premium:</strong> Wajib menyertakan API key melalui HTTP header <code className="inline-code">x-api-key</code> (Sangat direkomendasikan).</li>
-              <li><strong style={{ color: "var(--text)" }}>Query Parameter:</strong> Alternatif query <code className="inline-code">?apikey=KEY_KAMU</code> juga didukung untuk kemudahan URL embedding.</li>
+              <li><strong style={{ color: "var(--text)" }}>Wajib API Key:</strong> Semua endpoint wajib menyertakan API key aktif (lewat header <code className="inline-code">x-api-key</code> atau query <code className="inline-code">?apikey=</code>).</li>
+              <li><strong style={{ color: "var(--text)" }}>HTTP Header:</strong> Sangat direkomendasikan mengirim key melalui HTTP header <code className="inline-code">x-api-key: KEY_KAMU</code>.</li>
+              <li><strong style={{ color: "var(--text)" }}>Query Parameter:</strong> Alternatif query <code className="inline-code">?apikey=KEY_KAMU</code> juga didukung untuk kemudahan URL embedding / download langsung.</li>
               <li><strong style={{ color: "var(--text)" }}>Dev & Owner Mode:</strong> Akun admin (<code className="inline-code">admin@kadokunn.com</code>) otomatis memiliki hak istimewa unlimited bypass rate limit!</li>
             </ul>
             <CodeBlock title="bash - autentikasi header" code={CURL_AUTH} />
