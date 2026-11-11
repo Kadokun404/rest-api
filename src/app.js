@@ -993,6 +993,52 @@ app.get("/api/donate/status", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Webhook NusaOTP: POST & GET /api/webhook/nusaotp
+// Menerima callback OTP realtime dari NusaOTP
+// ---------------------------------------------------------------------------
+const nusaOtpLogs = [];
+
+app.all("/api/webhook/nusaotp", async (req, res) => {
+  try {
+    const payload = {
+      method: req.method,
+      query: req.query || {},
+      body: req.body || {},
+      headers: {
+        authorization: req.headers.authorization,
+        "content-type": req.headers["content-type"]
+      },
+      receivedAt: new Date().toISOString()
+    };
+
+    console.log("[NusaOTP Webhook] Payload diterima:", JSON.stringify(payload));
+
+    nusaOtpLogs.unshift(payload);
+    if (nusaOtpLogs.length > 50) nusaOtpLogs.pop();
+
+    return res.status(200).json({
+      status: true,
+      message: "Webhook NusaOTP berhasil diterima",
+      data: payload
+    });
+  } catch (err) {
+    console.error("[NusaOTP Webhook] Error:", err);
+    return res.status(500).json({
+      status: false,
+      message: err.message
+    });
+  }
+});
+
+app.get("/api/webhook/nusaotp/logs", (req, res) => {
+  return res.status(200).json({
+    status: true,
+    total: nusaOtpLogs.length,
+    logs: nusaOtpLogs
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Uploader publik: POST /upload (multipart, maks 50 MB) -> URL cloud
 // ---------------------------------------------------------------------------
 
