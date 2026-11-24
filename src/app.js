@@ -53,7 +53,47 @@ const app = express();
 
 app.set("json spaces", 2);
 
-app.use(cors());
+const ALLOWED_ORIGINS = new Set([
+  "https://kadokunn.com",
+  "https://www.kadokunn.com",
+  "https://api.kadokunn.com",
+  "https://qris.kadokunn.com",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+]);
+
+const SENSITIVE_CORS_PREFIXES = [
+  "/qris",
+  "/upload",
+  "/api/account",
+  "/api/auth",
+  "/api/payment",
+  "/api/admin",
+  "/api/keys",
+  "/api/nusaotp"
+];
+
+app.use((req, res, next) => {
+  const reqPath = (req.path || "").toLowerCase();
+  const isSensitive = SENSITIVE_CORS_PREFIXES.some((p) => reqPath === p || reqPath.startsWith(p + "/"));
+
+  if (isSensitive) {
+    return cors({
+      origin(origin, cb) {
+        if (!origin || ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+        return cb(null, false);
+      },
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    })(req, res, next);
+  }
+
+  return cors({
+    origin: "*",
+    credentials: false,
+    methods: ["GET", "POST", "HEAD", "OPTIONS"]
+  })(req, res, next);
+});
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
@@ -1054,6 +1094,52 @@ const runUploadMulter = (req, res) =>
     uploadMulter(req, res, (err) => (err ? reject(err) : resolve()));
   });
 
+const BLOCKED_UPLOAD_EXTS = new Set([
+  "html", "htm", "xhtml", "shtml", "mhtml",
+  "svg", "svgz", "xml", "xsl", "xslt",
+  "js", "mjs", "cjs", "jsx", "ts", "tsx",
+  "php", "phtml", "phar", "asp", "aspx", "jsp", "jspx", "cgi",
+  "sh", "bash", "zsh", "bat", "cmd", "ps1", "vbs", "hta",
+  "exe", "msi", "dll", "com", "scr", "jar", "swf"
+]);
+
+const BLOCKED_UPLOAD_MIMES = [
+  "text/html",
+  "application/xhtml",
+  "image/svg",
+  "text/xml",
+  "application/xml",
+  "javascript",
+  "ecmascript",
+  "x-httpd-php",
+  "x-sh",
+  "x-msdownload"
+];
+
+function isDangerousUpload(filename, mimetype, buffer) {
+  const ext = inferExt(filename === "file" ? "" : filename, "").toLowerCase();
+  if (ext && BLOCKED_UPLOAD_EXTS.has(ext)) {
+    return `Ekstensi file .${ext} tidak diizinkan`;
+  }
+  const mime = String(mimetype || "").toLowerCase();
+  if (BLOCKED_UPLOAD_MIMES.some((m) => mime.includes(m))) {
+    return "Tipe file (MIME) tidak diizinkan";
+  }
+  if (Buffer.isBuffer(buffer) && buffer.length > 0) {
+    const head = buffer.subarray(0, 512).toString("utf8").trimStart().toLowerCase();
+    if (
+      head.startsWith("<!doctype html") ||
+      head.startsWith("<html") ||
+      head.startsWith("<script") ||
+      head.startsWith("<svg") ||
+      (head.startsWith("<?xml") && (head.includes("<svg") || head.includes("<html")))
+    ) {
+      return "Konten aktif (HTML/SVG/Script) tidak diizinkan";
+    }
+  }
+  return null;
+}
+
 app.post("/upload", async (req, res) => {
   const hasKey = req.headers?.["x-api-key"] || req.headers?.authorization || req.query?.apikey || req.query?.api_key;
   if (hasKey) {
@@ -1062,6 +1148,7 @@ app.post("/upload", async (req, res) => {
     }
   } else {
     const sess = getSessionPayload(req);
+    let authedViaSession = false;
     if (sess?.a) {
       const acct = await getAccount(sess.a);
       if (acct?.apiKey) {
@@ -1069,7 +1156,11 @@ app.post("/upload", async (req, res) => {
         if (!(await authorizeRequest(req, res, { premium: false }))) {
           return;
         }
+        authedViaSession = true;
       }
+    }
+    if (!authedViaSession) {
+      return sendError(res, "API key atau login wajib disertakan untuk upload file", 401);
     }
   }
 
@@ -1087,10 +1178,15 @@ app.post("/upload", async (req, res) => {
     return sendError(res, "Tidak ada file. Kirim multipart/form-data dengan field 'file'", 400);
   }
 
-  await recordHit("/upload");
-
   const filename = String(file.originalname || "file").replace(/[/\\]/g, "_").slice(0, 120);
   const mimetype = file.mimetype || "application/octet-stream";
+
+  const dangerReason = isDangerousUpload(filename, mimetype, file.buffer);
+  if (dangerReason) {
+    return sendError(res, dangerReason, 400);
+  }
+
+  await recordHit("/upload");
 
   try {
     const uploaded = await uploadToGitHub(file.buffer, filename, mimetype);

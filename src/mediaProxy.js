@@ -102,9 +102,19 @@ export const proxyUrlFields = async (req, value, fields) => {
 export const proxyUrlList = async (req, list) =>
   Array.isArray(list) ? Promise.all(list.map((u) => buildProxiedUrl(req, u))) : list;
 
+const BLOCKED_PROXY_EXTS = new Set([
+  "html", "htm", "xhtml", "shtml", "mhtml",
+  "svg", "svgz", "xml", "js", "mjs", "php", "hta"
+]);
+
 // Handler Express untuk route GET /<id>.<ext>
 export const handleMediaProxy = async (req, res) => {
   const id = req.params[0];
+  const reqExt = String(req.params[1] || "").toLowerCase();
+  if (BLOCKED_PROXY_EXTS.has(reqExt)) {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.status(403).send("Forbidden");
+  }
   try {
     const raw = await kvGet(KEY_PREFIX + id);
     if (!raw) throw new Error("tidak ditemukan");
@@ -113,8 +123,14 @@ export const handleMediaProxy = async (req, res) => {
     if (!obj || typeof obj.u !== "string" || !/^https?:\/\//i.test(obj.u)) {
       throw new Error("payload tidak valid");
     }
+    const targetExt = inferExt(obj.u, "").toLowerCase();
+    if (BLOCKED_PROXY_EXTS.has(targetExt)) {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return res.status(403).send("Forbidden");
+    }
     if (obj.e && Date.now() > obj.e) throw new Error("kedaluwarsa");
 
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, obj.u);
   } catch {

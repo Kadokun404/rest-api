@@ -183,29 +183,50 @@ export const signApiKey = (entry = {}) => {
   };
   if (entry.a) payload.a = String(entry.a);
 
-  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const sig = crypto.createHmac("sha256", signingKey()).update(data).digest("base64url");
+  // Enkripsi payload dengan AES-256-GCM supaya struktur role/id tidak bisa dibaca lewat base64 decode
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", signingKey(), iv);
+  const enc = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
 
-  return `ka-${data}.${sig}`;
+  return `ka-v2.${iv.toString("base64url")}.${enc.toString("base64url")}.${tag.toString("base64url")}`;
 };
 
 export const verifySignedApiKey = (key) => {
   if (typeof key !== "string") return null;
 
-  const match = /^ka-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(key);
-  if (!match) return null;
+  let payload = null;
 
-  const [, data, sig] = match;
-  const expected = crypto.createHmac("sha256", signingKey()).update(data).digest("base64url");
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  // Format v2 terenkripsi: ka-v2.<iv>.<ciphertext>.<tag>
+  const v2 = /^ka-v2\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(key);
+  if (v2) {
+    try {
+      const iv = Buffer.from(v2[1], "base64url");
+      const enc = Buffer.from(v2[2], "base64url");
+      const tag = Buffer.from(v2[3], "base64url");
+      const decipher = crypto.createDecipheriv("aes-256-gcm", signingKey(), iv);
+      decipher.setAuthTag(tag);
+      const dec = Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+      payload = JSON.parse(dec);
+    } catch {
+      return null;
+    }
+  } else {
+    // Backwards-compatible v1: ka-<base64url>.<hmac>
+    const match = /^ka-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(key);
+    if (!match) return null;
 
-  let payload;
-  try {
-    payload = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
-  } catch {
-    return null;
+    const [, data, sig] = match;
+    const expected = crypto.createHmac("sha256", signingKey()).update(data).digest("base64url");
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+    try {
+      payload = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    } catch {
+      return null;
+    }
   }
 
   if (!payload || typeof payload !== "object" || typeof payload.p !== "string") return null;
@@ -339,8 +360,7 @@ export const authorizeRequest = async (req, res, target) => {
   if (account) isPremium = isOwnerId(account.id) || isPremiumActive(account);
 
   if (needsPremium && !isPremium) {
-    const label = account ? "user gratis" : `'${entry.plan || "free"}'`;
-    sendError(res, `Plan ${label} tidak punya akses ke endpoint premium`, 403);
+    sendError(res, "Forbidden", 403);
     return false;
   }
 
